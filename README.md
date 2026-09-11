@@ -45,9 +45,9 @@ python -m whack --simulate --headless --seconds 5
    range corrections and tracking limits. Calibrate servo direction, centre
    and pulse endpoints in the firmware before fitting the loaded bracket.
 5. Connect the PC and both ESP32s to the same 2.4 GHz local network, disable
-   wireless client isolation and allow local inbound UDP4210 on the PC.
+   wireless client isolation and allow local inbound UDP 4210 on the PC.
 6. Run the visualizer, clear the area, then press **C**. Calibration has a
-   three-second lead-in and measures20 aim points three times. Keep the whole
+   three-second lead-in and measures 20 aim points three times. Keep the whole
    area empty until it finishes. Walk into the area and watch the dot.
 
 ```bash
@@ -80,14 +80,14 @@ travel. Run only one controller/probe at a time.
 
 ## How tracking works
 
-The PC sends one measurement request at a time, with at least65 ms of quiet time
+The PC sends one measurement request at a time, with at least 65 ms of quiet time
 before the next request. Each node waits for its servo, pings and returns a
 sequence-tagged range. Two ranges define a forward circle intersection; accepted
-pairs must be no more than250 ms apart. Large servo moves may require a second
+pairs must be no more than 250 ms apart. Large servo moves may require a second
 pair once both sensors are settled. While tracking, bearings snap to measured
 background directions. When tracking is lost, both sensors scan candidate points.
 
-The dot disappears on invalid or stale data. A detected position within0.60 m
+The dot disappears on invalid or stale data. A detected position within 0.60 m
 of the screen triggers a warning and a system bell; sensor blind spots can still
 prevent detection. This is a prototype, not a verified collision-warning system.
 Initial acquisition and reacquisition can take a complete sweep and should be
