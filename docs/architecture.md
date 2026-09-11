@@ -1,36 +1,62 @@
-# Architecture and decisions
+# Tracking subsystem architecture
 
-## Geometry
+The current scope is ultrasound body tracking and a black-screen dot visualizer.
+The full assignment's gameplay and installer work are deferred.
 
-Coordinates are metres: x increases from the left edge (0) to the right edge
-(1.5), y increases away from the screen wall. Both sensor acoustic centres must
-be at the same measured y coordinate, default 0.20 m. Their default x coordinates
-are 0 and 1.5 m. The playable rectangle is x=0..1.5, y=0.60..2.00. Sensor boxes
-and all other hardware must remain within 0.50 m of the wall.
+## Layout and coordinates
+
+Each ESP32 controls one positional servo carrying one ultrasonic sensor. The
+PC coordinates measurements and performs localization. Coordinates are metres:
+`x` increases from the left edge(0) to the right edge(1.5), `y` increases away
+from the screen wall. Both acoustic centres have the same measured `y`, default
+0.20m, and default `x` coordinates0 and1.5m. The tracking rectangle is
+`x=0..1.5`, `y=0.60..2.00`. The screen maps near depth to top and far depth to
+bottom. All hardware must remain within0.50m of the wall.
 
 Two ranges to a common reflecting target define two circle intersections. The
-controller chooses the intersection in front of the sensors. This model assumes
-both echoes belong to the same player; ultrasonic beams often return different
-body surfaces or walls. Range geometry alone cannot prove target identity.
-Bearing gates, timeout rejection, acquisition sweeps, smoothing, and speed checks
-reduce bad fixes but do not replace physical validation.
+PC selects the forward intersection. Both echoes must belong to the same
+person; walls, arms, clothing and different torso surfaces violate this model.
+Servo aim is not a measured target bearing. Bearing gates, background rejection,
+range-pair timing and a speed gate reject some errors, but cannot prove target
+identity. See `docs/requirements.md` for physical validation.
 
-A servo carries each sensor; it does not strike the player or a mechanical mole.
-When tracked, both sensors point toward the last estimated position. When lost,
-they scan the same sequence of candidate positions in the playing area. Angles
-are measured counter-clockwise from +x (90 degrees faces away from the wall).
-Physical centre offsets and reverse mounting are set in firmware.
+The servo command is the angle counter-clockwise from+x:90 degrees faces away
+from the wall. Firmware maps this to pulse width using each mount's reversal,
+centre trim and travel limits. Position is open-loop; there is no servo encoder.
 
-## Scheduling and protocol
+## Acquisition, calibration and filtering
 
-PC binds UDP 4210. Nodes bind UDP 4211 and broadcast a discovery message every
-2 seconds. Both nodes and PC join the same local Wi-Fi network; client isolation
-must be off. Only one measurement command is outstanding. Node 0 is measured,
-then node 1, with at least 65 ms between responses and subsequent requests.
-Each node waits for its servo to settle before its bounded ultrasonic pulse.
-This deliberately prioritises distinct echoes over a promised frame rate.
+An empty-area profile samples20 candidate positions, three pairs per position.
+The sweep includes both near corners, the far region and a row in the warning
+zone. Calibration has a three-second lead-in. The median of successful echoes
+is stored for each bearing; fewer than two successes records no background echo.
+An invalid servo response or a lost packet fails calibration. A missing echo
+alone cannot distinguish clear space from a disconnected sensor, so validate
+sensors against a board first.
 
-ASCII datagrams, no trailing fields, protocol version WM1:
+During tracking, each commanded angle snaps to a bearing in that node's profile.
+A foreground echo must be at least0.15m closer than the stored room background,
+or the profile must have no return there. Unprofiled angles cannot bypass the
+filter. Simulation uses an ideal single reflector and does not require a profile.
+
+Accepted ranges must be within250ms of each other by default. A long second
+servo movement causes a repeat at the same aim point after settling. The
+scheduler then resumes normal acquisition. Circle geometry, beam consistency,
+speed and range checks precede a time-based display filter. The raw estimate
+controls the warning so display smoothing cannot postpone it. Warning release
+requires3cm beyond the near boundary. Calibration geometry changes invalidate
+old profiles.
+
+## Scheduling and wire protocol
+
+PC binds UDP4210. Nodes bind UDP4211 and broadcast discovery every2 seconds.
+All devices join the same local Wi-Fi network. Only one command is outstanding:
+node0, then node1, with at least65ms after a response before the next command.
+Node servo settling is bounded to700ms and echo waiting to25ms. A command times
+out after1s, followed by a100ms guard; late replies are ignored. No node pings
+without a request. Tracking-loss sweeps trade reacquisition speed for coverage.
+
+Strict ASCII datagrams:
 
 ```
 WM1 HELLO <node>
@@ -38,27 +64,38 @@ WM1 MEASURE <seq> <angle_mdeg>
 WM1 RANGE <node> <seq> <actual_angle_mdeg> <distance_mm> <status>
 ```
 
-`node`: 0 or 1. `seq`: 1..4294967295. `angle_mdeg`: 0..180000.
-`distance_mm`: integer 0..4500; 0 on errors. `status`: OK, TIMEOUT, INVALID.
-A successful range is >=20 mm. A reply must match the outstanding node,
-sequence, sender address and commanded angle. Replies never trigger another
-ping themselves. Repeated command sequences return a cached result or wait
-for the active result, never a second physical measurement.
+- `node`:0 or1; `seq`:1..4294967295, seeded from host time and incremented.
+- `angle_mdeg`:0..180000;90,000 means forward.
+- `distance_mm`:20..4000 for the firmware;0 on errors.
+- `status`:OK, TIMEOUT or INVALID.
 
-This is an isolated-lab protocol, with no authentication or encryption. It is
-not intended for hostile networks. Use a dedicated local Wi-Fi network.
+Replies must match the pending node, sequence and source address. Successful
+replies must also match the requested angle; an INVALID response may report the
+unchanged bearing if travel limits reject movement. Angles describe calibrated
+commands, not independently observed servo positions. Cached command sequences
+never re-ping. Nodes release host ownership after30seconds of inactivity.
 
-## Failure behaviour
+Discovered nodes expire after6seconds without evidence of life. Duplicate IDs
+suspend that node. Explicitly configured IP addresses remain usable across
+outages. Only one PC should coordinate the nodes. There is no protocol
+authentication; use a dedicated trusted local network.
 
-Missing nodes, invalid measurements, impossible intersections, stale pairs,
-and out-of-bounds positions suspend scoring. The dead-zone decision uses the
-raw position before display smoothing. Tracking loss also visibly suspends play.
-An ultrasonic blind spot can prevent both localization and a dead-zone warning;
-the software warning is not a safety-rated collision prevention system.
+## Failure behaviour and limits
 
-## Reference
+The dot disappears immediately after an invalid pair, or after1second without
+a new accepted fix. Missing sensors, impossible intersections and out-of-bounds
+positions are shown in diagnostics. A detected near-wall position activates a
+visual warning and throttled system bell. Behind the sensor baseline, the
+forward-intersection model has no coverage. Loss of an echo must be shown as
+loss of tracking, not inferred to be a safe person position.
 
-The supplied study code uses a different board/UART sensor arrangement and a
-framebuffer display. Its separation of acquisition, noise filtering, and rendering
-in `example-code/tracker.py` informed the module boundaries. The new implementation
-uses an independent UDP protocol and two-circle geometry.
+Firmware runs independently on each ESP32, while the PC owns global sequencing.
+Simulations validate timing and message handling; only actual body tests establish
+accuracy, usable speed, acquisition delay, interference and battery runtime.
+
+## Study reference
+
+`example-code/tracker.py` separates acquisition, filtering and rendering on a
+different board/UART configuration. Its black-background position display is the
+visual reference. The new tracker uses its own UDP protocol and circle geometry;
+the vendored files remain unchanged.

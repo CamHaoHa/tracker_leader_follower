@@ -8,6 +8,8 @@ dist/
 *.egg-info/
 firmware/include/config.local.h
 config.local.json
+calibration.local.json
+*.csv
 *.log
 graphify-out/cache/
 example-code/graphify-out/

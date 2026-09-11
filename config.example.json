@@ -1,0 +1,14 @@
+{
+  "width": 1.5,
+  "near_y": 0.6,
+  "far_y": 2.0,
+  "left_x": 0.0,
+  "right_x": 1.5,
+  "sensor_y": 0.2,
+  "left_offset_m": 0.0,
+  "right_offset_m": 0.0,
+  "beam_half_angle_deg": 20.0,
+  "max_speed_m_s": 3.0,
+  "smoothing_tau_s": 0.12,
+  "max_pair_skew_s": 0.25
+}
