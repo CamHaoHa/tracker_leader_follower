@@ -1,0 +1,3 @@
+.pio/
+.pio-core/
+include/config.local.h
