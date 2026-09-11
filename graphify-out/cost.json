@@ -1,0 +1,14 @@
+{
+  "runs": [
+    {
+      "date": "2026-09-11T22:22:12.732132+00:00",
+      "input_tokens": null,
+      "output_tokens": null,
+      "files": 7,
+      "usage_status": "unavailable"
+    }
+  ],
+  "total_input_tokens": 0,
+  "total_output_tokens": 0,
+  "usage_note": "Totals exclude runs whose token usage is unavailable."
+}

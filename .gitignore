@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pio/
+.platformio/
+build/
+dist/
+*.egg-info/
+firmware/include/config.local.h
+config.local.json
+*.log
+graphify-out/cache/
+example-code/graphify-out/
