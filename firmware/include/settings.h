@@ -14,6 +14,42 @@
 #ifndef WIFI_PASSWORD
 #define WIFI_PASSWORD ""
 #endif
+// Keep home and school settings together; selection never deletes either one.
+#ifndef WIFI_PROFILE
+#define WIFI_PROFILE 0
+#endif
+#ifndef SCHOOL_WIFI_SSID
+#define SCHOOL_WIFI_SSID ""
+#endif
+#ifndef SCHOOL_WIFI_PASSWORD
+#define SCHOOL_WIFI_PASSWORD ""
+#endif
+#ifndef TRACKER_WIFI_SSID
+#define TRACKER_WIFI_SSID "TrackerNet"
+#endif
+#ifndef TRACKER_WIFI_PASSWORD
+#define TRACKER_WIFI_PASSWORD ""
+#endif
+#ifndef TRACKER_WIFI_CHANNEL
+#define TRACKER_WIFI_CHANNEL 6
+#endif
+#ifndef ONENET_SSID
+#define ONENET_SSID "Macquarie OneNet"
+#endif
+#ifndef ONENET_USERNAME
+#define ONENET_USERNAME ""
+#endif
+#ifndef ONENET_PASSWORD
+#define ONENET_PASSWORD ""
+#endif
+#ifndef ONENET_SERVER_DOMAIN
+#define ONENET_SERVER_DOMAIN "radius.mq.edu.au"
+#endif
+// Used to seed certificate time before Wi-Fi. Recompile before OneNet use;
+// __DATE__/__TIME__ follow the build machine timezone, configurable below.
+#ifndef ONENET_BUILD_TIMEZONE
+#define ONENET_BUILD_TIMEZONE "AEST-10AEDT,M10.1.0,M4.1.0/3"
+#endif
 #ifndef SERVO_REVERSED
 #define SERVO_REVERSED 0
 #endif
@@ -33,13 +69,13 @@
 #define SERVO_MAX_MDEG 180000
 #endif
 #ifndef SERVO_PIN
-#define SERVO_PIN 18
+#define SERVO_PIN 25
 #endif
 #ifndef ULTRASONIC_TRIG_PIN
-#define ULTRASONIC_TRIG_PIN 23
+#define ULTRASONIC_TRIG_PIN 32
 #endif
 #ifndef ULTRASONIC_ECHO_PIN
-#define ULTRASONIC_ECHO_PIN 19
+#define ULTRASONIC_ECHO_PIN 35
 #endif
 #ifndef SERVO_SETTLE_MIN_MS
 #define SERVO_SETTLE_MIN_MS 60
@@ -58,6 +94,10 @@
 #endif
 
 static_assert(NODE_ID == 0 || NODE_ID == 1, "NODE_ID must be 0 or 1");
+static_assert(WIFI_PROFILE >= 0 && WIFI_PROFILE <= 3,
+              "WIFI_PROFILE: 0=home, 1=school personal/hotspot, 2=OneNet PEAP, 3=tracker AP");
+static_assert(TRACKER_WIFI_CHANNEL >= 1 && TRACKER_WIFI_CHANNEL <= 13,
+              "TRACKER_WIFI_CHANNEL must be within 1..13");
 static_assert(SERVO_REVERSED == 0 || SERVO_REVERSED == 1,
               "SERVO_REVERSED must be 0 or 1");
 static_assert(SERVO_MIN_MDEG >= 0 && SERVO_MAX_MDEG <= 180000 &&

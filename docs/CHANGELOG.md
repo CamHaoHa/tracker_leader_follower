@@ -1,5 +1,51 @@
 # Engineering change log
 
+## Left ESP32 hosts TrackerNet (15 September 2026)
+
+- Added profile 3: the left ESP32 creates a protected access point at
+  192.168.4.1; right ESP32 and laptop join using DHCP. The laptop continues
+  coordinating both sensors and rendering the spot.
+- AP readiness, UDP replies and broadcasts now use the AP interface; home,
+  school personal Wi-Fi and optional OneNet profiles remain available.
+- Added `--network tracker` preparation with a shared private password and
+  preserved original credentials/servo settings. `--network configured`
+  restores the existing profile. Both uploads remain manual.
+- Added credential-pairing/preservation and DHCP discovery regression tests.
+  Actual radio connectivity and motion tracking require the user's hardware test.
+
+## Coordinated live tracking workflow (15 September 2026)
+
+- Implemented WM2 concurrent servo aiming and sequential one-use ultrasonic
+  firing leases, including conservative recovery after lost UDP responses.
+- Added unicast discovery for fixed IPs and six-second connection freshness.
+- Added dense empty-field calibration, two-pair target confirmation,
+  timestamp-aware range alignment, alpha-beta velocity estimation, short
+  prediction, nearby recovery and full search after loss.
+- The window renders one cyan spot; predictions are hollow and expire after
+  200 ms by default. Gameplay, zone warnings and bells are excluded.
+- Preserved home/school network profiles and private settings; regenerated
+  separate Arduino sketches for manual upload.
+- Software tests cover synthetic moving targets, missing echoes, delayed/lost
+  messages, acoustic scheduling and UI behavior. Firmware builds pass on Arduino
+  ESP32 2.x and 3.x. These results do not establish real player accuracy or delay.
+
+## Live tracker setup with the user's hardware
+
+- Identified Freenove ESP32-WROOM-32E boards and HC-SR04 sensors; configured
+  servo GPIO25, TRIG GPIO32 and ECHO GPIO35 through the external divider.
+- Prepared separate Arduino IDE left/right sketches from the maintained node
+  source, with private Wi-Fi/servo settings preserved when regenerating.
+- Added Arduino ESP32 3.x PWM/UDP compatibility while retaining the pinned
+  PlatformIO/core 2.x builds. Both nodes compile with both toolchains.
+- Added an Arduino IDE-to-desktop setup guide and a local geometry file using
+  the documented default placement, pending actual mounting measurements.
+- Closed a simulated scan-coverage gap using additional paired aim directions
+  (39 points for default geometry), and briefly retry the last player aim after
+  missed echoes while immediately hiding invalid position data.
+- Distance reliability/calibration tests are paused at the user's request;
+  completed Excel/serial evidence remains saved. Live servo/player tracking
+  still needs upload, mounting alignment and an empty-area background scan.
+
 ## Baseline
 
 - Preserved the assignment, read-only study implementation, and initial graph.

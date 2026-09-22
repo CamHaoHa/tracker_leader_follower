@@ -9,6 +9,9 @@ description = "Two ESP32 wireless ultrasound body-tracking subsystem"
 requires-python = ">=3.10"
 dependencies = []
 
+[project.optional-dependencies]
+sensor-test = ["pyserial>=3.5,<4", "openpyxl>=3.1,<4"]
+
 [project.scripts]
 body-whack = "whack.__main__:main"
 
