@@ -21,11 +21,12 @@ class UdpIntegrationTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         geometry = Geometry()
         profile = Path(self.temp.name) / "calibration.json"
+        self.profile = profile
         profile.write_text(json.dumps({
-            "version": 1,
+            "version": 2,
             "geometry": asdict(geometry),
-            "background": {f"{node}:{geometry.angle(node, point)}": None
-                           for point in geometry.scan_targets() for node in (0, 1)},
+            "background": {f"{node}:{angles[node]}": None
+                           for angles in geometry.calibration_aims() for node in (0, 1)},
         }))
         # Fixed ports deliberately exercise the actual firmware protocol. Bind
         # errors are test failures, rather than silently skipping networking.
@@ -72,15 +73,16 @@ class UdpIntegrationTests(unittest.TestCase):
 
     def test_discovery_localization_and_offline_timeout(self):
         self.start_nodes("--x", "0.75", "--y", "1.3")
-        snapshot = self.until(lambda snap: snap.in_bounds)
+        snapshot = self.until(lambda snap: snap.in_bounds and snap.state == "track")
         self.assertEqual(self.controller.transport.address(0), ("127.0.0.2", 4211))
         self.assertEqual(self.controller.transport.address(1), ("127.0.0.3", 4211))
         self.assertAlmostEqual(snapshot.position[0], 0.75, delta=0.002)
         self.assertAlmostEqual(snapshot.position[1], 1.3, delta=0.002)
         self.stop_nodes()
         stats = self.summary()
-        self.assertGreaterEqual(min(stats["pings"]), 1)
-        self.assertEqual(stats["overlapping_commands"], 0)
+        self.assertGreaterEqual(min(stats["pings"]), 2)  # Two independent pairs confirm the lock.
+        self.assertGreater(stats["overlapping_commands"], 0)
+        self.assertEqual(stats["overlapping_pings"], 0)
         self.assertGreaterEqual(stats["min_ping_gap_ms"], 65)
         snapshot = self.until(lambda snap: snap.position is None, timeout=2)
         self.assertFalse(snapshot.in_bounds)
@@ -91,13 +93,54 @@ class UdpIntegrationTests(unittest.TestCase):
         self.assertIsNone(snapshot.position)
         self.assertTrue(all("Offline" in status for status in snapshot.node_status))
 
+    def test_manual_addresses_discover_without_broadcast_and_versions_expire(self):
+        self.controller.close()
+        self.controller = Controller(Geometry(), calibration_path=self.profile,
+                                     node_ips=("127.0.0.2", "127.0.0.3"))
+        self.addCleanup(self.controller.close)
+        self.start_nodes("--no-broadcast")
+        snapshot = self.until(lambda snap: snap.in_bounds and snap.state == "track")
+        self.assertIsNotNone(snapshot.position)
+        self.assertEqual(tuple(self.controller.transport.protocol_version(n) for n in (0, 1)), (2, 2))
+        self.stop_nodes()
+        snapshot = self.until(lambda snap: all(self.controller.transport.protocol_version(n) is None
+                                               for n in (0, 1)), timeout=7)
+        self.assertIsNone(snapshot.position)
+        self.assertEqual(self.controller.transport.address(0), ("127.0.0.2", 4211))
+        stats = self.summary()
+        self.assertEqual(stats["overlapping_pings"], 0)
+        self.assertGreaterEqual(stats["min_ping_gap_ms"], 65)
+
     def test_empty_scene_returns_timeout_without_a_position(self):
         self.start_nodes("--empty")
         snapshot = self.until(lambda snap: snap.node_status == ("timeout", "timeout"))
         self.assertIsNone(snapshot.position)
         self.assertFalse(snapshot.in_bounds)
         self.stop_nodes()
-        self.assertEqual(self.summary()["overlapping_commands"], 0)
+        self.assertEqual(self.summary()["overlapping_pings"], 0)
+
+    def test_moving_reflector_tracks_over_real_udp_without_ping_overlap(self):
+        self.start_nodes("--motion")
+        snapshot = self.until(lambda snap: snap.in_bounds and snap.state == "track")
+        positions = [snapshot.position]
+        ages = []
+        deadline = time.monotonic() + 2.5
+        while time.monotonic() < deadline:
+            snapshot = self.controller.poll()
+            if snapshot.position is not None:
+                positions.append(snapshot.position)
+                ages.append(snapshot.fix_age_s)
+            time.sleep(.005)
+        self.assertGreater(len(positions), 50)
+        self.assertGreater(max(p[0] for p in positions) - min(p[0] for p in positions), .15)
+        self.assertLess(max(ages), self.controller.geometry.prediction_horizon_s)
+        self.assertGreater(snapshot.update_hz, 3)
+        self.stop_nodes()
+        stats = self.summary()
+        self.assertGreaterEqual(min(stats["pings"]), 8)
+        self.assertEqual(stats["overlapping_pings"], 0)
+        self.assertEqual(stats["malformed_commands"], 0)
+        self.assertGreaterEqual(stats["min_ping_gap_ms"], 65)
 
     def test_absent_second_node_prevents_any_ping(self):
         self.start_nodes("--drop-node", "1")
