@@ -126,6 +126,95 @@ class ControllerTests(unittest.TestCase):
         t.inbox = [(Ready(0, f.seq, f.angles[0], 1000, "OK"), f.addresses[0])]
         c.poll(); self.assertEqual(c.samples, {})
 
+    def test_lost_ready_is_re_requested_instead_of_failing_the_frame(self):
+        class DroppedReady(SimulatedTransport):
+            dropped = None
+            def receive(self):
+                results = super().receive()
+                if self.dropped is None: self.dropped = set()
+                kept = []
+                for m, a in results:
+                    if isinstance(m, Ready) and (m.node, m.seq) not in self.dropped:
+                        self.dropped.add((m.node, m.seq)); continue  # lose the first grant
+                    kept.append((m, a))
+                return kept
+        clock = Clock(); t = DroppedReady(clock, Geometry())
+        c = Controller(simulate=True, clock=clock, transport=t)
+        run(c, clock, 4)
+        aims = [(n, s) for _, n, kind, s, _ in t.commands if kind == "AIM"]
+        self.assertGreater(len(aims), len(set(aims)))
+        self.assertGreaterEqual(len(t.ping_times), 2)
+        self.assertEqual(c.state in ("confirm", "track"), True)
+
+    def test_pause_stops_commands_and_reset_resumes_them(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock); t = c.transport
+        run(c, clock, 1.5)
+        before = len(t.commands); self.assertGreater(before, 0)
+        c.pause()
+        parked = [cmd for cmd in t.commands[before:] if cmd[2] == "AIM" and cmd[4] == 90000]
+        self.assertEqual(sorted(cmd[1] for cmd in parked), [0, 1])  # both servos sent to 90
+        before = len(t.commands)
+        snap = run(c, clock, 1.5)
+        self.assertEqual(len(t.commands), before)
+        self.assertIsNone(c.pending)
+        self.assertIn("Paused", snap.status)
+        c.reset()
+        self.assertTrue(all(cmd[2] == "AIM" and cmd[4] == 90000 for cmd in t.commands[before:]))  # only parking aims
+        before = len(t.commands)
+        run(c, clock, 1.0)
+        self.assertTrue(c.paused); self.assertEqual(len(t.commands), before)  # reset stays idle
+        c.start_acquisition()
+        run(c, clock, 1.5)
+        self.assertFalse(c.paused)
+        self.assertGreater(len(t.commands), before)
+
+    def test_start_paused_waits_for_search_and_idles_after_calibration(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock, start_paused=True); t = c.transport
+        snap = run(c, clock, 1.0)
+        self.assertEqual(t.commands, []); self.assertIn("Search", snap.status)
+        c.start_acquisition(); run(c, clock, 1.0)
+        self.assertGreater(len(t.commands), 0)
+
+    def test_sensor_busy_reply_retries_without_failing_calibration(self):
+        class BusyOnce(SimulatedTransport):
+            busy = None
+            def receive(self):
+                results = super().receive()
+                if self.busy is None: self.busy = set()
+                out = []
+                for m, a in results:
+                    if isinstance(m, Range) and m.seq % 3 == 0 and (m.node, m.seq) not in self.busy:
+                        self.busy.add((m.node, m.seq))
+                        out.append((Range(m.node, m.seq, m.angle_mdeg, 0, "INVALID", 0, 0, 2), a))
+                    else:
+                        out.append((m, a))
+                return out
+        with tempfile.TemporaryDirectory() as temp:
+            clock = Clock(); t = BusyOnce(clock, Geometry()); t.target = None
+            c = Controller(clock=clock, transport=t, calibration_path=Path(temp)/"cal.json")
+            c.start_calibration(); run(c, clock, 240)
+            self.assertFalse(c.calibrating); self.assertTrue(c.background)
+            self.assertNotIn("interrupted", c.calibration_message)
+
+    def test_calibration_skips_bearings_outside_servo_travel(self):
+        class LimitedServo(SimulatedTransport):
+            def receive(self):
+                out = []
+                for m, a in super().receive():
+                    if isinstance(m, Ready) and m.node == 0 and m.angle_mdeg < 15000:
+                        m = Ready(m.node, m.seq, m.angle_mdeg, 0, "INVALID")
+                    out.append((m, a))
+                return out
+        with tempfile.TemporaryDirectory() as temp:
+            clock = Clock(); t = LimitedServo(clock, Geometry()); t.target = None
+            path = Path(temp)/"cal.json"
+            c = Controller(clock=clock, transport=t, calibration_path=path, start_paused=True)
+            c.start_calibration(); run(c, clock, 300)
+            self.assertFalse(c.calibrating); self.assertTrue(c.background); self.assertTrue(path.exists())
+            self.assertGreater(c.calibration_skipped, 0)
+            self.assertIn("outside servo travel", c.calibration_message)
+            self.assertEqual(Controller(clock=clock, transport=t, calibration_path=path).background, c.background)
+
     def test_lost_fire_reply_holds_other_sensor_until_entire_lease_expires(self):
         class DroppedReply(SimulatedTransport):
             ready_deadlines = None
@@ -184,6 +273,9 @@ class ControllerTests(unittest.TestCase):
             self.assertEqual(reloaded.background, c.background)
             t = InjectedTransport(clock, Geometry()); c = Controller(clock=clock, transport=t, calibration_path=path)
             c.start_calibration(); run(c, clock, 5)
+            # Transient silence is retried a few times before the map is abandoned.
+            self.assertTrue(c.calibrating); self.assertIn("Retrying", c.calibration_message)
+            run(c, clock, 5)
             self.assertFalse(c.calibrating); self.assertFalse(c.background)
             self.assertIn("interrupted", c.poll().status)
 

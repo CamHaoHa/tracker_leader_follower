@@ -50,6 +50,11 @@ class Geometry:
     # Additive corrections for measured sensor range bias, not human body width.
     left_offset_m: float = 0.0
     right_offset_m: float = 0.0
+    # A person is not a point: each sensor ranges the nearest body surface, so
+    # both circles are short by roughly half the torso width. Adding this radius
+    # converts surface ranges to centre ranges. Applied to player echoes only,
+    # never to the empty-room background map. 0 keeps the point-target model.
+    body_radius_m: float = 0.0
     # Assumed acoustic half-cone: the target can be to either side of the aim.
     # A servo command is not an exact bearing measurement of the player.
     beam_half_angle_deg: float = 20.0
@@ -87,6 +92,8 @@ class Geometry:
             raise ValueError("Invalid prediction, search, calibration or network limits")
         if max(abs(self.left_offset_m), abs(self.right_offset_m)) > 0.3:
             raise ValueError("Range offsets must be within 0.3m")
+        if not 0 <= self.body_radius_m <= 0.5:
+            raise ValueError("Body radius must be within 0..0.5 m")
 
     def angle(self, node: int, point: tuple[float, float]) -> int:
         """Point one sensor toward a field position using atan2(dy, dx).
@@ -171,6 +178,23 @@ class Geometry:
             else:
                 mid = midpoint[1]
                 cells.extend(((x0, x1, mid, y1, depth+1), (x0, x1, y0, mid, depth+1)))
+        # Order the search path so consecutive aims are small servo movements:
+        # greedy nearest neighbour in paired bearing space, starting at the
+        # centre. The largest of the two swings is what costs settling time and
+        # motor current, so that is the distance being minimised. Coverage is
+        # unchanged; only the visiting order differs. Very large target sets
+        # keep generation order to bound the O(n^2) ordering cost.
+        if len(targets) <= 1500:
+            aims = [tuple(self.angle(node, point) for node in (0, 1)) for point in targets]
+            remaining = list(range(1, len(targets)))
+            path, current = [0], aims[0]
+            while remaining:
+                index = min(remaining, key=lambda i: (max(abs(aims[i][0]-current[0]), abs(aims[i][1]-current[1])),
+                                                      abs(aims[i][0]-current[0]) + abs(aims[i][1]-current[1]), i))
+                remaining.remove(index)
+                path.append(index)
+                current = aims[index]
+            targets = [targets[i] for i in path]
         # Geometry is immutable. Cache an immutable result for the acquisition
         # loop; callers cannot corrupt a later calibration by editing this list.
         return tuple(targets)
@@ -225,7 +249,8 @@ def locate(geometry: Geometry, left_m: float, right_m: float) -> tuple[float, fl
     bearings. Servo angles are used later as broad consistency checks only.
     Two ranges cannot identify a person or prove they hit the same body surface.
     """
-    r0, r1 = left_m + geometry.left_offset_m, right_m + geometry.right_offset_m
+    r0 = left_m + geometry.left_offset_m + geometry.body_radius_m
+    r1 = right_m + geometry.right_offset_m + geometry.body_radius_m
     if not all(math.isfinite(v) and 0.02 <= v <= 4.5 for v in (r0, r1)):
         raise ValueError("Invalid range")
     baseline = geometry.right_x - geometry.left_x
@@ -353,7 +378,10 @@ class Tracker:
         for node, sample in enumerate((left, right)):
             dt = stamp - sample[1]
             observation = tuple(point[i] - self.velocity[i]*dt for i in (0, 1)) if model_recent else point
-            if abs(g.angle(node, observation)-sample[0].angle_mdeg) > g.beam_half_angle_deg*1000:
+            # A shoulder can sit at the beam edge while the body centre lies just
+            # outside it: widen the cone by the body's angular half-size.
+            body_mdeg = math.degrees(math.atan2(g.body_radius_m, max(ranges[node], .05)))*1000
+            if abs(g.angle(node, observation)-sample[0].angle_mdeg) > g.beam_half_angle_deg*1000 + body_mdeg:
                 self.invalidate("Echoes outside aimed beams", allow_prediction=True)
                 return False
         dt = stamp - self.last_good

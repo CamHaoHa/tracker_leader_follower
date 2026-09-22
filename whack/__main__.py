@@ -13,19 +13,19 @@ from .tracking import load_geometry
 
 CSV_FIELDS = (
     "elapsed_s", "x_m", "y_m", "fix_age_s", "in_bounds", "dead_zone",
-    "state", "predicted", "confidence", "update_hz", "status", "left", "right",
-)
+    "state", "predicted", "confidence", "update_hz", "status", "left", "right", "aim_x", "aim_y")
 
 
 def _finite_age(snapshot):
     return snapshot.fix_age_s if math.isfinite(snapshot.fix_age_s) else None
 
 
-def _record_row(elapsed, snapshot):
+def _record_row(elapsed, snapshot, aim=(None, None)):
     return (
         round(elapsed, 3), *(snapshot.position or ("", "")), _finite_age(snapshot),
         snapshot.in_bounds, snapshot.dead_zone, snapshot.state, snapshot.predicted,
         snapshot.confidence, snapshot.update_hz, snapshot.status, *snapshot.node_status,
+        *("" if v is None else round(v, 3) for v in aim),  # where the servos were last aimed
     )
 
 
@@ -51,6 +51,9 @@ def main(argv=None):
         controller = Controller(
             load_geometry(args.config), simulate=args.simulate, calibration_path=args.calibration,
             port=args.port, node_ips=args.nodes, start_mode=args.start_mode,
+            # The desktop hardware window waits for Search/Calibrate; headless and
+            # simulation runs keep starting on their own.
+            start_paused=not args.simulate and not args.headless and not args.calibrate,
         )
         if args.calibrate:
             controller.start_calibration()
@@ -66,7 +69,10 @@ def main(argv=None):
                 snap = original_poll()
                 elapsed = time.monotonic() - start
                 if elapsed - last_record[0] >= .1:
-                    writer.writerow(_record_row(elapsed, snap))
+                    aim = getattr(controller, "target", None)
+                    if not (isinstance(aim, tuple) and len(aim) == 2):
+                        aim = (None, None)
+                    writer.writerow(_record_row(elapsed, snap, aim))
                     logfile.flush()
                     last_record[0] = elapsed
                 return snap

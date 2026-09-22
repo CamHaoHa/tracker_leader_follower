@@ -1,3 +1,13 @@
+## 2026-09-22 — first bench session with both boxes
+
+See `docs/mvp1-bench-log-2026-09-22.md` for the measured timeline. Summary:
+
+- Controller: lost READY re-requested; calibration tolerates 3 failed frames per step; "sensor busy" `INVALID` (ECHO still high after a no-echo cycle) retried instead of failing; search visits targets along a small-swing path and restarts near the last known position; idle start with Search / Pause / Reset; servos parked at 90° on pause, reset and close; body-radius model (`body_radius_m`) and 0.25 s smoothing; saved maps stay valid across tuning changes; CSV records the aim point.
+- Firmware: servo ramp at 150°/s with READY waiting for the ramp; caps 0–180° in the local config after a 15–165° travel check.
+- UI: 24 px status, five buttons on their own row, PAUSED banner, mirrored x axis, field frame with 0.25 m grid and labels.
+- Tools: `tools/session_metrics.py` summarises recordings.
+- Results: calibration 138 pairs in ~31 s with no aborts after the retry changes; tracking 4–5 fresh fixes/s, ±2 cm standing, 75 % dot coverage over a 228 s walking run; edges near either box remain weak.
+
 # Engineering change log
 
 ## Left ESP32 hosts TrackerNet (15 September 2026)
