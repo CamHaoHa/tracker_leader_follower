@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Two-Servo Tracker Explained</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  --paper: #f3f5f7; --ink: #16202a; --muted: #5b6a74; --rule: #d3dbe1;
+  --accent: #0e8a9b; --accent-ink: #ffffff; --code-bg: #e9eef2; --code-ink: #1b2a33;
+  --box: #dfe6ea; --dot: #00b5cc; --warn: #b3541e;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1416; --ink: #d9e1e6; --muted: #93a2ab; --rule: #253036;
+    --accent: #35c6d9; --accent-ink: #06181c; --code-bg: #171f24; --code-ink: #d4dde3;
+    --box: #1b2429; --dot: #00e5ff; --warn: #e08a52;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1416; --ink: #d9e1e6; --muted: #93a2ab; --rule: #253036;
+  --accent: #35c6d9; --accent-ink: #06181c; --code-bg: #171f24; --code-ink: #d4dde3;
+  --box: #1b2429; --dot: #00e5ff; --warn: #e08a52;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55;
+  padding-block: 32px 64px; padding-inline: 16px; }
+main { max-width: 76ch; margin: 0 auto; }
+h1 { font-size: 2rem; line-height: 1.15; font-weight: 600; margin: 0 0 8px; text-wrap: balance; }
+h2 { font-size: 1.35rem; font-weight: 600; margin: 48px 0 12px; padding-top: 16px; border-top: 1px solid var(--rule); text-wrap: balance; }
+h3 { font-size: 1.05rem; font-weight: 600; margin: 28px 0 8px; }
+p, li { max-width: 70ch; }
+.lede { color: var(--muted); font-size: 1.05rem; margin: 0 0 24px; }
+.eyebrow { font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+nav.toc ol { margin: 0; padding-left: 1.4em; columns: 2; column-gap: 32px; }
+nav.toc li { break-inside: avoid; margin: 2px 0; }
+a { color: var(--accent); }
+code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); color: var(--code-ink); padding: .1em .35em; border-radius: 3px; }
+figure.code { margin: 16px 0 24px; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; background: var(--code-bg); }
+figure.code figcaption { display: flex; justify-content: space-between; gap: 12px; padding: 6px 12px; font-family: var(--mono); font-size: .75rem; color: var(--muted); border-bottom: 1px solid var(--rule); }
+figure.code .lang { text-transform: uppercase; letter-spacing: .06em; }
+figure.code pre { margin: 0; padding: 12px 14px; overflow-x: auto; }
+figure.code pre code { background: none; padding: 0; font-size: .8rem; line-height: 1.45; color: var(--code-ink); }
+table { border-collapse: collapse; width: 100%; margin: 12px 0 20px; font-size: .95rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+.tablewrap { overflow-x: auto; }
+.diagram { margin: 16px 0 24px; border: 1px solid var(--rule); border-radius: 6px; background: var(--box); padding: 8px; overflow-x: auto; }
+.diagram svg { display: block; width: 100%; height: auto; max-width: 100%; }
+.diagram figcaption { font-size: .85rem; color: var(--muted); padding: 6px 4px 2px; }
+.note { border-left: 3px solid var(--accent); padding: 8px 14px; margin: 16px 0; background: var(--code-bg); }
+.warn { border-left-color: var(--warn); }
+kbd { font-family: var(--mono); font-size: .85em; border: 1px solid var(--rule); border-radius: 3px; padding: 0 .35em; }
+.svg-ink { fill: var(--ink); } .svg-muted { fill: var(--muted); } .svg-line { stroke: var(--ink); fill: none; }
+.svg-accent { stroke: var(--accent); fill: none; } .svg-accent-fill { fill: var(--accent); } .svg-dot { fill: var(--dot); }
+.svg-box { fill: var(--paper); stroke: var(--ink); } .svg-state { fill: var(--paper); stroke: var(--accent); }
+.svg-text { font-family: var(--sans); font-size: 13px; fill: var(--ink); } .svg-small { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+@media (max-width: 600px) { nav.toc ol { columns: 1; } h1 { font-size: 1.6rem; } body { font-size: 15px; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<main>
+<div class="eyebrow">Whack-a-Mole body tracker · state on 22 September 2026</div>
+<h1>Two-Servo Tracker Explained</h1>
+<p class="lede">How the laptop makes two independent ESP32 boxes point at the same spot, how one echo pair becomes a position, and the state machine that turns pairs into a tracked dot. Every code block is copied from the committed source.</p>
+
+<nav class="toc"><ol>
+<li><a href="#roles">Who decides what</a></li>
+<li><a href="#cycle">One measurement cycle</a></li>
+<li><a href="#agree">How two servos agree</a></li>
+<li><a href="#pair">From two ranges to one point</a></li>
+<li><a href="#states">The laptop state machine</a></li>
+<li><a href="#search">Searching and calibrating</a></li>
+<li><a href="#firmware">Firmware safety rules</a></li>
+<li><a href="#screen">What the screen shows</a></li>
+<li><a href="#numbers">What we measured</a></li>
+</ol></nav>
+
+<h2 id="roles">1. Who decides what</h2>
+<p>The two boxes are deliberately dumb. Each one owns a servo and an HC-SR04 and does exactly two things on command: <em>aim</em> the servo at a bearing, and <em>fire</em> one ultrasonic ping. They never move on their own, never ping on their own, and never talk to each other. All decisions live on the laptop in <code>whack/controller.py</code> and <code>whack/tracking.py</code>.</p>
+<figure class="diagram">
+<svg viewBox="0 0 720 300" role="img" aria-label="Laptop coordinating two boxes on a wall with the field in front">
+  <rect x="20" y="20" width="680" height="12" class="svg-ink" opacity=".25"/>
+  <text x="24" y="52" class="svg-small">screen wall · y = 0</text>
+  <rect x="120" y="40" width="70" height="40" rx="4" class="svg-box" stroke-width="1.5"/>
+  <text x="155" y="64" text-anchor="middle" class="svg-text">node 0</text>
+  <rect x="530" y="40" width="70" height="40" rx="4" class="svg-box" stroke-width="1.5"/>
+  <text x="565" y="64" text-anchor="middle" class="svg-text">node 1</text>
+  <text x="155" y="98" text-anchor="middle" class="svg-small">x = 0, y = 0.2</text>
+  <text x="565" y="98" text-anchor="middle" class="svg-small">x = 1.5, y = 0.2</text>
+  <rect x="120" y="120" width="480" height="150" class="svg-accent" stroke-dasharray="6 5" stroke-width="1.5"/>
+  <text x="360" y="258" text-anchor="middle" class="svg-small">playing area · 1.5 m wide · 0.6 to 2.0 m from the wall</text>
+  <circle cx="380" cy="205" r="9" class="svg-dot"/>
+  <text x="396" y="210" class="svg-text">player (x, y)</text>
+  <line x1="155" y1="80" x2="372" y2="199" class="svg-accent" stroke-width="1.5"/>
+  <line x1="565" y1="80" x2="388" y2="199" class="svg-accent" stroke-width="1.5"/>
+  <text x="140" y="180" class="svg-small">θ0 = atan2(y−0.2, x−0)</text>
+  <text x="470" y="112" class="svg-small">θ1 = atan2(y−0.2, x−1.5)</text>
+  <rect x="640" y="200" width="60" height="40" rx="4" class="svg-box" stroke-width="1.5"/>
+  <text x="670" y="224" text-anchor="middle" class="svg-text">laptop</text>
+  <path d="M640 210 C 620 150, 610 90, 600 60" class="svg-line" stroke-dasharray="3 3"/>
+  <path d="M640 232 C 560 300, 250 300, 190 82" class="svg-line" stroke-dasharray="3 3"/>
+  <text x="700" y="292" text-anchor="end" class="svg-small">UDP 4210 ⇄ 4211 over Wi-Fi</text>
+</svg>
+<figcaption>World axes: x runs along the wall from node 0 toward node 1, y runs out into the room. Bearing 0° = along the wall toward +x, 90° = straight out, 180° = along the wall toward −x. Both boxes use the same convention.</figcaption>
+</figure>
+
+<h2 id="cycle">2. One measurement cycle</h2>
+<p>A cycle produces one <em>pair</em>: a left range and a right range taken at (nearly) the same moment, from servos pointed at the same spot. The messages are plain ASCII over UDP. The laptop binds port 4210, each box listens on 4211.</p>
+<figure class="diagram">
+<svg viewBox="0 0 720 330" role="img" aria-label="Sequence of AIM, READY, FIRE and RANGE messages"><text x="360" y="316" text-anchor="middle" class="svg-small">RANGE fields after OK: sample_ms (board clock) and age_us (trigger → reply)</text>
+  <line x1="120" y1="40" x2="120" y2="310" class="svg-line" stroke-width="1"/>
+  <line x1="360" y1="40" x2="360" y2="310" class="svg-line" stroke-width="1"/>
+  <line x1="600" y1="40" x2="600" y2="310" class="svg-line" stroke-width="1"/>
+  <text x="120" y="28" text-anchor="middle" class="svg-text">node 0</text>
+  <text x="360" y="28" text-anchor="middle" class="svg-text">laptop</text>
+  <text x="600" y="28" text-anchor="middle" class="svg-text">node 1</text>
+  <g class="svg-accent" stroke-width="1.5">
+    <line x1="360" y1="60" x2="122" y2="60"/><line x1="360" y1="60" x2="598" y2="60"/>
+    <line x1="120" y1="120" x2="358" y2="120"/><line x1="600" y1="130" x2="362" y2="130"/>
+    <line x1="360" y1="170" x2="122" y2="170"/><line x1="120" y1="200" x2="358" y2="200"/>
+    <line x1="360" y1="260" x2="598" y2="260"/><line x1="600" y1="290" x2="362" y2="290"/>
+  </g>
+  <text x="240" y="54" text-anchor="middle" class="svg-small">WM2 AIM seq θ0</text>
+  <text x="480" y="54" text-anchor="middle" class="svg-small">WM2 AIM seq θ1</text>
+  <text x="240" y="114" text-anchor="middle" class="svg-small">WM2 READY 0 seq θ0 lease_ms OK</text>
+  <text x="480" y="124" text-anchor="middle" class="svg-small">WM2 READY 1 seq θ1 lease_ms OK</text>
+  <text x="240" y="164" text-anchor="middle" class="svg-small">WM2 FIRE seq</text>
+  <text x="240" y="194" text-anchor="middle" class="svg-small">WM2 RANGE 0 seq θ0 mm OK …</text>
+  <text x="480" y="254" text-anchor="middle" class="svg-small">WM2 FIRE seq</text>
+  <text x="480" y="284" text-anchor="middle" class="svg-small">WM2 RANGE 1 seq θ1 mm OK …</text>
+  <text x="40" y="92" class="svg-small">servo ramps</text>
+  <text x="40" y="104" class="svg-small">+ settles</text>
+  <text x="612" y="92" class="svg-small">servo ramps</text>
+  <text x="612" y="104" class="svg-small">+ settles</text>
+  <text x="20" y="186" class="svg-small">ping ≤ 25 ms</text>
+  <text x="612" y="306" class="svg-small">ping ≤ 25 ms</text>
+  <rect x="372" y="218" width="220" height="18" class="svg-box" stroke="none"/><text x="482" y="231" text-anchor="middle" class="svg-small">≥ 65 ms guard, one ping in the air</text>
+</svg>
+<figcaption>Both AIMs carry the same sequence number, so the two READY and RANGE replies can only ever be matched to each other. AIM is silent; only FIRE makes sound.</figcaption>
+</figure>
+<p>The laptop side of this is step 4 and 5 of <code>Controller.poll()</code>:</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/controller.py · Controller.poll()</span></figcaption><pre><code># 4. Prepare both servo movements together. AIM does not emit ultrasound,
+# so movements may overlap each other and an acoustic hold-off interval.
+# Normal player acquisition needs a usable background calibration; the
+# calibration sweep itself is also allowed through this gate.
+ready = self.simulate or bool(self.background) or self.calibrating
+if connected and ready and not self.paused and self.state != &quot;lost&quot; and now &gt;= self.next_send:
+    if self.pending is None:
+        angles = self._aim_angles(now)
+        f = Frame(self._next_sequence(), angles, addresses, now, aim_sent=now)
+        self.pending = f
+        try:
+            for n in (0, 1):
+                self.transport.send(aim(f.seq, angles[n]), addresses[n])
+        except (OSError, ValueError) as exc:
+            self._fail_frame(now, f&quot;Could not aim sensors: {exc}&quot;)
+    f = self.pending
+    # 5. Once both servos report settled, alternate left then right.
+    # Wait at least 65 ms after a completed reply before another FIRE.
+    # This is conservative: echo duration and transport time add to the
+    # trigger-to-trigger interval. A missing reply uses the longer lease
+    # expiry guard instead. Do not fire near the end of a READY lease;
+    # re-aim with a new sequence instead of queuing a delayed trigger.
+    if f and len(f.ready) == 2 and f.firing is None and now &gt;= self.acoustic_safe_at:
+        n = 1 if 0 in f.samples else 0
+        response, receipt = f.ready[n]
+        if now &gt;= receipt+response.lease_ms/1000-.05:
+            self._fail_frame(now, &quot;Firing lease expired; aiming again&quot;)
+        else:
+            # Mark before send, so even a socket error keeps the lease guard.
+            f.firing, f.fire_time = n, now
+            try:
+                self.transport.send(fire(f.seq), f.addresses[n])
+            except (OSError, ValueError) as exc:
+                self._fail_frame(now, f&quot;Could not request range: {exc}&quot;)</code></pre></figure>
+
+<h2 id="agree">3. How two servos agree</h2>
+<p>They do not negotiate. The laptop picks <strong>one target point</strong> in field coordinates and converts it into two bearings, one per box, with plain trigonometry. Both boxes get their bearing in the same instant with the same sequence number. "Agreement" is therefore guaranteed by construction: the servos are aimed at the same (x, y) because the same number produced both angles.</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/tracking.py · Geometry.angle()</span></figcaption><pre><code>def angle(self, node: int, point: tuple[float, float]) -&gt; int:
+    &quot;&quot;&quot;Point one sensor toward a field position using atan2(dy, dx).
+
+    Example: at a point directly in front of either sensor dx=0, so its
+    bearing is 90 degrees (90000 millidegrees). Both nodes use the SAME
+    world axes: 0 is right, 90 forward, 180 left. The right node will usually
+    need a different angle from the left to look at the same player.
+    Firmware separately applies that mount&#x27;s reversal, trim and travel bounds.
+    &quot;&quot;&quot;
+    sx = self.left_x if node == 0 else self.right_x
+    return round(math.degrees(math.atan2(point[1] - self.sensor_y, point[0] - sx)) * 1000)</code></pre></figure>
+<p>Where the target point comes from depends on the state. While tracking, it is the motion model's prediction 80 ms ahead. During local recovery it is that prediction nudged 12 cm in each direction. While searching it is the next entry of the scan plan. During calibration each box gets its own dense sweep instead.</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/controller.py · Controller._aim_angles()</span></figcaption><pre><code>def _aim_angles(self, now):
+    &quot;&quot;&quot;Convert the next predicted target into one bearing for each servo.
+
+    In track/confirm, project the motion model to now + aim_lead_s (80 ms
+    ahead by default) to allow for movement/measurement time. The projection
+    is capped by local_search_s, so an old velocity cannot steer forever.
+    The ESP32 uses these commanded bearings; they are not measured bearings
+    of the echo. Both beams still need compatible distance observations.
+
+    During local recovery, cycle around the prediction: centre, 12 cm left,
+    12 cm right, 12 cm nearer, and 12 cm farther. One offset is tried per
+    measurement cycle; the time limit does not guarantee all five are tried.
+    After loss, find uses the wide scan plan again. Calibration instead uses
+    independent dense sweeps, with each scheduled pair repeated three times.
+    &quot;&quot;&quot;
+    g = self.geometry
+    if self.calibrating:
+        return g.calibration_aims()[self.calibration_index//3]
+    if self.state in (&quot;track&quot;, &quot;local_search&quot;, &quot;confirm&quot;) and self.tracker.filtered is not None:
+        point = self.tracker.predict(now+g.aim_lead_s, horizon=g.local_search_s)
+        if self.state == &quot;local_search&quot;:
+            offsets = ((0, 0), (-.12, 0), (.12, 0), (0, -.12), (0, .12))
+            dx, dy = offsets[self.local_index % len(offsets)]
+            self.local_index += 1
+            point = (point[0]+dx, point[1]+dy)
+        # Only servo targets are clamped. Observations outside the field are
+        # never turned into valid edge positions.
+        self.target = (min(g.width, max(0, point[0])),
+                       min(g.far_y, max((g.sensor_y+g.near_y)/2, point[1])))
+    else:
+        self.target = g.scan_targets()[self.scan_index]
+    return tuple(g.angle(n, self.target) for n in (0, 1))</code></pre></figure>
+<p>After the pair comes back, agreement is <em>checked</em> rather than assumed, because a servo angle is a command, not a measurement of where the echo came from. That is section 4.</p>
+
+<h2 id="pair">4. From two ranges to one point</h2>
+<p>Each range is a circle around its sensor. Two circles cross in front of the wall at one point:</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/tracking.py · locate() — circle intersection</span></figcaption><pre><code>r0 = left_m + geometry.left_offset_m + geometry.body_radius_m
+r1 = right_m + geometry.right_offset_m + geometry.body_radius_m
+if not all(math.isfinite(v) and 0.02 &lt;= v &lt;= 4.5 for v in (r0, r1)):
+    raise ValueError(&quot;Invalid range&quot;)
+baseline = geometry.right_x - geometry.left_x
+# Triangle inequalities reject circles that do not intersect. Tangency is
+# also rejected: near the baseline, small range errors can cause large errors.
+if r0 + r1 &lt;= baseline or abs(r0 - r1) &gt;= baseline:
+    raise ValueError(&quot;Ranges have no stable forward intersection&quot;)
+x_relative = (r0*r0 - r1*r1 + baseline*baseline) / (2*baseline)
+height_squared = r0*r0 - x_relative*x_relative
+if height_squared &lt;= 0:
+    raise ValueError(&quot;Ranges have no forward intersection&quot;)
+return geometry.left_x + x_relative, geometry.sensor_y + math.sqrt(height_squared)</code></pre></figure>
+<p>Two corrections matter here. <code>left_offset_m</code> / <code>right_offset_m</code> are sensor bias. <code>body_radius_m</code> (0.18 m in the bench configs) is the human-width model: an HC-SR04 returns the nearest surface, which is your shoulder or arm, so both circles are short by about half a torso. Adding the radius intersects the circles at your centre. Measured on the bench, this removed a 0.2 m "too near the wall" bias.</p>
+<p>A pair then has to pass four gates in <code>Tracker.update()</code> before it moves the dot:</p>
+<ol>
+<li><strong>Foreground</strong> (in the controller): each range must be more than 15 cm nearer than the calibrated background at that bearing, otherwise it is the room, not a person.</li>
+<li><strong>Freshness</strong>: both samples within <code>max_pair_skew_s</code> of each other, and the earlier one is advanced along the last velocity so a walking player does not get two positions.</li>
+<li><strong>Beam agreement</strong>: the intersection must lie inside both aimed cones, widened by the body's angular size.</li>
+<li><strong>Speed</strong>: the jump since the last accepted point must be physically possible.</li>
+</ol>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/tracking.py · Tracker.update() steps 4–6</span></figcaption><pre><code># 4. Solve the two-circle equations at that common estimated time.
+try:
+    point = locate(g, *ranges)
+except ValueError:
+    self.invalidate(&quot;Inconsistent echoes&quot;, allow_prediction=True)
+    return False
+
+# 5. Check each acoustic cone at its own observation time. Back-project
+# the candidate to the earlier sample before comparing its bearing with
+# the commanded aim. Passing this gate does not prove echo identity.
+for node, sample in enumerate((left, right)):
+    dt = stamp - sample[1]
+    observation = tuple(point[i] - self.velocity[i]*dt for i in (0, 1)) if model_recent else point
+    # A shoulder can sit at the beam edge while the body centre lies just
+    # outside it: widen the cone by the body&#x27;s angular half-size.
+    body_mdeg = math.degrees(math.atan2(g.body_radius_m, max(ranges[node], .05)))*1000
+    if abs(g.angle(node, observation)-sample[0].angle_mdeg) &gt; g.beam_half_angle_deg*1000 + body_mdeg:
+        self.invalidate(&quot;Echoes outside aimed beams&quot;, allow_prediction=True)
+        return False
+dt = stamp - self.last_good
+if model_recent and self.raw is not None:
+    # 6. Bound the movement since the last accepted raw position. The
+    # extra 0.15 m is noise tolerance, not a claimed sensor accuracy.
+    if math.dist(point, self.raw) &gt; g.max_speed_m_s*dt + .15:
+        self.invalidate(&quot;Position jumped&quot;, allow_prediction=True)
+        return False</code></pre></figure>
+<p>The foreground gate is the reason the empty-field calibration exists:</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/controller.py · Controller._foreground()</span></figcaption><pre><code>r = sample[0]
+if r.status != &quot;OK&quot;:
+    return False
+bearings = sorted((int(key.split(&quot;:&quot;)[1]), value) for key, value in self.background.items()
+                  if key.startswith(f&quot;{r.node}:&quot;))
+if not bearings:
+    return self.simulate and not self.background
+exact = next((v for a, v in bearings if abs(a-r.angle_mdeg) &lt;= 1), ...)
+if exact is not ...:
+    baseline = exact
+else:
+    lower = [(a, v) for a, v in bearings if a &lt; r.angle_mdeg]
+    upper = [(a, v) for a, v in bearings if a &gt; r.angle_mdeg]
+    if not lower or not upper:
+        return False
+    (a, va), (b, vb) = lower[-1], upper[0]
+    if b-a &gt; self.geometry.calibration_step_deg*1000+1:
+        return False
+    # At wall/object boundaries use the nearer baseline conservatively.
+    valid = [v for v in (va, vb) if v is not None]
+    baseline = min(valid) if valid else None
+return baseline is None or r.distance_mm/1000 &lt; baseline-.15</code></pre></figure>
+
+<h2 id="states">5. The laptop state machine</h2>
+<figure class="diagram">
+<svg viewBox="0 0 760 360" role="img" aria-label="Controller state machine">
+  <g stroke-width="1.5">
+    <rect x="20" y="150" width="110" height="44" rx="22" class="svg-state"/><text x="75" y="177" text-anchor="middle" class="svg-text">idle / paused</text>
+    <rect x="170" y="40" width="120" height="44" rx="22" class="svg-state"/><text x="230" y="67" text-anchor="middle" class="svg-text">calibration</text>
+    <rect x="170" y="150" width="110" height="44" rx="22" class="svg-state"/><text x="225" y="177" text-anchor="middle" class="svg-text">find</text>
+    <rect x="330" y="150" width="110" height="44" rx="22" class="svg-state"/><text x="385" y="177" text-anchor="middle" class="svg-text">confirm</text>
+    <rect x="490" y="150" width="110" height="44" rx="22" class="svg-state"/><text x="545" y="177" text-anchor="middle" class="svg-text">track</text>
+    <rect x="490" y="260" width="130" height="44" rx="22" class="svg-state"/><text x="555" y="287" text-anchor="middle" class="svg-text">local_search</text>
+    <rect x="300" y="260" width="110" height="44" rx="22" class="svg-state"/><text x="355" y="287" text-anchor="middle" class="svg-text">lost</text>
+  </g>
+  <g class="svg-line" stroke-width="1.5" marker-end="url(#a)">
+    <path d="M130 172 L170 172"/>
+    <path d="M75 150 C 75 62, 120 62, 170 62"/>
+    <path d="M230 84 L230 150"/>
+    <path d="M280 172 L330 172"/>
+    <path d="M440 172 L490 172"/>
+    <path d="M545 194 L545 260"/>
+    <path d="M490 282 L410 282"/>
+    <path d="M355 260 C 300 230, 260 230, 240 194"/>
+    <path d="M385 150 C 385 110, 260 110, 240 150"/>
+    <path d="M600 282 C 660 282, 660 172, 600 172"/>
+  </g>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8 z" class="svg-ink"/></marker></defs>
+  <text x="150" y="164" text-anchor="middle" class="svg-small">Search</text>
+  <text x="110" y="54" class="svg-small">C · sweep, 3 s lead-in</text>
+  <text x="238" y="120" class="svg-small">map saved</text>
+  <text x="305" y="164" text-anchor="middle" class="svg-small">1 good pair</text>
+  <text x="465" y="164" text-anchor="middle" class="svg-small">2nd pair &lt; 0.5 s, &lt; 0.3 m</text>
+  <text x="556" y="230" class="svg-small">missed pair</text>
+  <text x="450" y="276" text-anchor="middle" class="svg-small">&gt; 0.5 s without a fix</text>
+  <text x="240" y="236" class="svg-small">restart near last position</text>
+  <text x="300" y="104" class="svg-small">miss: next scan target</text>
+  <text x="640" y="232" class="svg-small">good pair</text>
+</svg>
+<figcaption>States held in <code>Controller.state</code>. The dot is drawn only in <code>track</code> (solid) and <code>local_search</code> (hollow, predicted). Pause parks both servos at 90° and freezes the machine wherever it is.</figcaption>
+</figure>
+<p>The transitions are spread over three small functions. A completed pair either advances acquisition or refreshes the track:</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/controller.py · Controller._complete_pair()</span></figcaption><pre><code>def _complete_pair(self, samples, now):
+    &quot;&quot;&quot;Validate a matched pair and advance acquisition or movement following.
+
+    First reject unchanged room echoes. Tracker.update() then checks timing,
+    corrects for sequential sample times using recent velocity, intersects
+    the distance circles, checks beam agreement, and updates position/speed.
+    Only accepted pairs add a measurement timestamp to the rate history.
+
+    Two accepted acquisition pairs are required before track becomes visible.
+    The second must follow within 0.5 s and lie within 0.3 m of the first;
+    otherwise it starts a new candidate. An already established track can
+    recover from local_search after one acceptable pair while its model is
+    still recent. This is approximate single-target association, not proof
+    that two echoes came from the same person or body surface.
+    &quot;&quot;&quot;
+    if self.calibrating:
+        self._complete_calibration(samples)
+        return
+    left, right = samples[0], samples[1]
+    if not (self._foreground(left) and self._foreground(right)):
+        self._miss(now, &quot;No matching foreground echoes&quot;)
+        return
+    previous_point, previous_stamp = self.tracker.raw, self.tracker.last_good
+    if not self.tracker.update(left, right, now):
+        self._miss(now, self.tracker.reason)
+        return
+    self.follow_misses = 0
+    self.good_times.append(self.tracker.last_good)
+    if self.state in (&quot;track&quot;, &quot;local_search&quot;):
+        self.state = &quot;track&quot;
+        self.local_index = 0
+    else:
+        if self.state == &quot;confirm&quot; and (self.tracker.last_good-previous_stamp &gt; .5 or
+                previous_point is None or math.dist(previous_point, self.tracker.raw) &gt; .3):
+            self.confirmations = 0
+        self.confirmations += 1
+        self.state = &quot;track&quot; if self.confirmations &gt;= self.CONFIRM_PAIRS else &quot;confirm&quot;</code></pre></figure>
+<p>A rejected pair is a "miss". Its effect depends on whether a track already exists:</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/controller.py · Controller._miss()</span></figcaption><pre><code>def _miss(self, now, reason):
+    &quot;&quot;&quot;Choose local recovery for an established track, full search otherwise.
+
+    A brief bad echo preserves the previous velocity for bounded prediction;
+    it does not refresh the timestamp or keep the spot visible indefinitely.
+    During acquisition, a miss instead clears the candidate. Centre mode
+    holds the initial aim for roughly two seconds before advancing the scan.
+    &quot;&quot;&quot;
+    self.follow_misses += 1
+    if self.state in (&quot;track&quot;, &quot;local_search&quot;):
+        self.tracker.invalidate(reason, allow_prediction=True)
+        self.state = &quot;local_search&quot;
+    else:
+        self.tracker.reset()
+        self.tracker.reason = reason
+        self.confirmations = 0
+        self.state = &quot;find&quot;
+        if self.start_mode == &quot;search&quot; or now-self.find_started &gt;= 2.0:
+            self.scan_index = (self.scan_index+1) % len(self.geometry.scan_targets())</code></pre></figure>
+<p>Loss and recovery are timed in <code>poll()</code>. Losing the player triggers a bounded local search, then a full search that starts where the player was last seen:</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/controller.py · Controller.poll() step 3</span></figcaption><pre><code># 3. Give nearby recovery a bounded window measured from acquisition of
+# the last good pair. The visible spot has its own, shorter expiry in
+# Tracker.position(); hiding the spot does not require waiting 500 ms.
+# Cancel the old frame on loss so late replies cannot restore an old lock.
+if self.state in (&quot;track&quot;, &quot;local_search&quot;) and now-self.tracker.last_good &gt; self.geometry.local_search_s:
+    self._cancel_frame()
+    self.confirmations = 0
+    self.good_times.clear()
+    self.state, self.lost_at = &quot;lost&quot;, now
+    self.tracker.invalidate(&quot;Player lost — searching again&quot;)
+elif self.state == &quot;lost&quot; and now-self.lost_at &gt;= .1:
+    # Full search after a lost track, but start it where the player was
+    # last seen: the scan path is spatially ordered, so nearby targets
+    # come first and the sweep widens from there.
+    self.scan_index = self._nearest_scan_index(self.tracker.raw)
+    self.tracker.reset()
+    self.confirmations = 0
+    self.find_started = now-2.0
+    self.state = &quot;find&quot;</code></pre></figure>
+<p>Network and sensor failures go through one funnel. Lost packets during calibration are retried, a "sensor busy" reply (ECHO still high after a missed echo) re-aims without penalty, and only persistent failure aborts:</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/controller.py · Controller._fail_frame()</span></figcaption><pre><code>def _fail_frame(self, now, reason, soft=False):
+    &quot;&quot;&quot;Handle transport/timing failure without immediately issuing more work.
+
+    soft: the sensor refused to ping because its ECHO line was still high
+    from a previous no-echo cycle (HC-SR04 modules hold it for up to a few
+    hundred ms). That is neither a lost player nor a broken calibration:
+    re-aim the same target after a short wait. A line stuck high for many
+    cycles escalates to a normal failure so the operator sees it.
+
+    Calibration must be complete to be useful, so a failed frame abandons
+    that partial map. Tracking can attempt recovery after a short backoff,
+    still respecting any longer acoustic hold imposed by _cancel_frame().
+    &quot;&quot;&quot;
+    self._cancel_frame()
+    if soft:
+        self.soft_failures += 1
+        if self.soft_failures &lt;= self.SOFT_FAILURES:
+            self.next_send = max(self.next_send, now+.15)
+            return
+        reason = f&quot;{reason}; sensor ECHO stuck, check wiring&quot;
+    self.soft_failures = 0
+    if self.calibrating:
+        self.calibration_failures += 1
+        if self.calibration_failures &lt;= self.CALIBRATION_RETRIES:
+            # Keep the samples gathered so far; the same step is aimed again.
+            self.calibration_message = f&quot;Retrying calibration step: {reason}&quot;
+        else:
+            self.calibrating = False
+            self.background = {}
+            self.calibration_message = f&quot;Calibration interrupted: {reason}; retry with the area empty&quot;
+            self.state = &quot;find&quot;
+    else:
+        self._miss(now, reason)
+    self.next_send = max(self.next_send, now+.1)</code></pre></figure>
+
+<h2 id="search">6. Searching and calibrating</h2>
+<h3>Search plan</h3>
+<p><code>Geometry.scan_targets()</code> builds a set of field points such that every cell of the field is covered by both beams from at least one aim (20° half-angle model). Since 22 September the list is ordered as a greedy nearest-neighbour path in bearing space, so consecutive aims are small servo moves (12–14° on average) instead of jumps across the field:</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/tracking.py · Geometry.scan_targets() ordering</span></figcaption><pre><code># Order the search path so consecutive aims are small servo movements:
+# greedy nearest neighbour in paired bearing space, starting at the
+# centre. The largest of the two swings is what costs settling time and
+# motor current, so that is the distance being minimised. Coverage is
+# unchanged; only the visiting order differs. Very large target sets
+# keep generation order to bound the O(n^2) ordering cost.
+if len(targets) &lt;= 1500:
+    aims = [tuple(self.angle(node, point) for node in (0, 1)) for point in targets]
+    remaining = list(range(1, len(targets)))
+    path, current = [0], aims[0]
+    while remaining:
+        index = min(remaining, key=lambda i: (max(abs(aims[i][0]-current[0]), abs(aims[i][1]-current[1])),
+                                              abs(aims[i][0]-current[0]) + abs(aims[i][1]-current[1]), i))
+        remaining.remove(index)
+        path.append(index)
+        current = aims[index]
+    targets = [targets[i] for i in path]
+# Geometry is immutable. Cache an immutable result for the acquisition
+# loop; callers cannot corrupt a later calibration by editing this list.
+return tuple(targets)</code></pre></figure>
+<h3>Calibration sweep</h3>
+<p>Calibration does not aim both boxes at shared points. Each box sweeps its own bearings in 3° steps, node 0 ascending from ~8° to 90°, node 1 descending from ~172° to 90°, three pings per bearing. The median of the valid pings per bearing becomes the background map (<code>None</code> = no repeatable echo).</p>
+<figure class="code"><figcaption><span class="lang">python</span><span class="path">whack/tracking.py · Geometry.calibration_aims()</span></figcaption><pre><code>@lru_cache(maxsize=16)
+def calibration_aims(self) -&gt; tuple[tuple[int, int], ...]:
+    &quot;&quot;&quot;Dense independent bearing sweeps, including every search bearing.
+
+    Calibration need not aim both sensors at the same point. Each motor moves
+    monotonically through its own bearings, avoiding long zigzag movements.
+    Every search bearing is included, and gaps are filled to the configured
+    step so later tracking can compare nearby directions to the background.
+
+    These are geometric bearings; this planner does not know each motor&#x27;s
+    physical travel. Unreachable angles are rejected by firmware. In
+    particular, the current temporary 30..150 degree SG90 test bounds do
+    not permit the full default empty-field sweep.
+    &quot;&quot;&quot;
+    step = round(self.calibration_step_deg * 1000)
+    bearings = []
+    for node in (0, 1):
+        required = {self.angle(node, point) for point in self.scan_targets()}
+        lo, hi = min(required), max(required)
+        required.update(range(lo, hi + 1, step))
+        bearings.append(sorted(required, reverse=(node == 1)))
+    return tuple((bearings[0][min(i, len(bearings[0])-1)],
+                  bearings[1][min(i, len(bearings[1])-1)])
+                 for i in range(max(map(len, bearings))))</code></pre></figure>
+<div class="note">Bearings a servo cannot reach are skipped and stored as "no background" rather than aborting the sweep. The status line reports how many were skipped.</div>
+
+<h2 id="firmware">7. Firmware safety rules</h2>
+<p>The box enforces the physical rules so a lost or delayed packet can never cause two pings in the air at once. An AIM is accepted, the servo <em>ramps</em> to the bearing, and only when the settle timer has elapsed does the box grant a one-use, one-second <em>firing lease</em> with its READY:</p>
+<figure class="code"><figcaption><span class="lang">c++</span><span class="path">firmware/src/main.cpp · handle_command(), accepting an AIM</span></figcaption><pre><code>  // World angle -&gt; physical command. Reversed mounting uses 180000 - bearing;
+  // trim is then added, and the final coordinate must be inside the configured
+  // limits. Rejecting an unreachable angle is essential: silently clamping it
+  // would tell the laptop the beam points somewhere it does not actually point.
+  int32_t target_servo_mdeg = 0;
+  if (!servo_ready || !wm::servo_position(command.bearing_mdeg, SERVO_REVERSED,
+          SERVO_CENTER_TRIM_MDEG, SERVO_MIN_MDEG, SERVO_MAX_MDEG, target_servo_mdeg)) {
+    if (command.kind == wm::CommandKind::Aim) send_ready(address, transaction);
+    else finish(transaction, 0, &quot;INVALID&quot;);
+    return;
+  }
+
+  // Estimate the mechanical wait from angular movement: by default 60 ms plus
+  // 3 ms per degree, capped at 700 ms. This needs checking with the loaded mount;
+  // READY means this timer elapsed, not that an encoder confirmed the position.
+  // Store a deadline instead of delay(settle_ms), so Wi-Fi remains responsive
+  // and the other ESP32 can be moving at the same time.
+  // Movement is measured from where the ramp currently is, so an AIM that
+  // supersedes an unfinished move is timed from the real position estimate.
+  const uint32_t movement = static_cast&lt;uint32_t&gt;(abs(target_servo_mdeg - servo_output_mdeg));
+  const uint32_t remaining_ms = reached(now, servo_ready_at) ? 0 : servo_ready_at - now;
+  uint32_t settle_ms = 0;
+  if (movement != 0) {
+    // Ramp at the gentle rate unless that would overrun the settle cap; then
+    // ramp just fast enough to arrive with the minimum settle time to spare.
+    const uint32_t budget_ms = SERVO_SETTLE_MAX_MS - SERVO_SETTLE_MIN_MS;
+    slew_rate_mdeg_per_ms = max(kServoSlewMdegPerMs, (movement + budget_ms - 1) / budget_ms);
+    const uint32_t ramp_ms = (movement + slew_rate_mdeg_per_ms - 1) / slew_rate_mdeg_per_ms;
+    const uint32_t lag_ms = (static_cast&lt;uint64_t&gt;(movement) * SERVO_SETTLE_MS_PER_DEG + 999) / 1000;
+    settle_ms = SERVO_SETTLE_MIN_MS + max(ramp_ms, lag_ms);
+    settle_ms = min(settle_ms, static_cast&lt;uint32_t&gt;(SERVO_SETTLE_MAX_MS));
+    last_slew_at = now;  // slew_servo() ramps the output from here on.
+  } else {
+    settle_ms = remaining_ms;  // No extra wait for an unchanged, settled servo.
+  }
+  servo_ready_at = now + settle_ms;
+  current_servo_mdeg = target_servo_mdeg;
+  current_bearing_mdeg = command.bearing_mdeg;  // Commanded bearing, not an encoder reading.
+  transaction.aim_accepted = true;
+  pending_index = index;
+}</code></pre></figure>
+<figure class="code"><figcaption><span class="lang">c++</span><span class="path">firmware/src/main.cpp · settle_if_ready()</span></figcaption><pre><code>void settle_if_ready() {
+  // Called repeatedly while the motor moves. WM2 never fires ultrasound here:
+  // it grants READY, then waits for the laptop to choose this node&#x27;s acoustic turn.
+  if (pending_index &lt; 0) return;
+  const uint32_t now = millis();
+  if (!reached(now, servo_ready_at)) return;
+  Transaction&amp; transaction = transactions[pending_index];
+  if (transaction.command.kind == wm::CommandKind::Measure &amp;&amp;
+      have_ping &amp;&amp; now - last_ping_at &lt; ULTRASONIC_MIN_GAP_MS) return;
+  pending_index = -1;
+  transaction.settled = true;
+  if (transaction.command.kind == wm::CommandKind::Aim) {
+    // The 1000 ms, one-use lease begins now, at completion of the settling wait.
+    // The host uses its remaining time when deciding whether a FIRE is still safe
+    // to send; this board enforces expiry even if that packet arrives late.
+    transaction.lease.settle(now);
+    send_ready(owner_ip, transaction);
+  } else {
+    // Legacy WM1 MEASURE combines aiming and firing for the single-node probe.
+    // The live two-node controller uses the separate WM2 AIM/FIRE sequence.
+    acquire(transaction);
+  }
+}</code></pre></figure>
+<p>The lease is the whole contract between the two sides:</p>
+<figure class="code"><figcaption><span class="lang">c++</span><span class="path">firmware/include/wm_protocol.h · FireLease</span></figcaption><pre><code>struct FireLease {
+  uint32_t deadline = 0;
+  bool ready = false;
+  bool consumed = false;
+
+  void settle(uint32_t now, uint32_t duration_ms = 1000) {
+    if (!ready &amp;&amp; !consumed) {
+      deadline = now + duration_ms;
+      ready = true;
+    }
+  }
+  uint32_t remaining(uint32_t now) const {
+    if (!ready || consumed || static_cast&lt;int32_t&gt;(deadline - now) &lt;= 0) return 0;
+    return deadline - now;
+  }
+  bool consume(uint32_t now, bool have_ping, uint32_t last_ping, uint32_t gap_ms) {
+    const bool allowed = remaining(now) != 0 &amp;&amp; (!have_ping || now - last_ping &gt;= gap_ms);
+    consumed = true;
+    return allowed;
+  }
+  void revoke() { consumed = true; }
+};</code></pre></figure>
+<p>A FIRE that arrives inside the lease, and at least 65 ms after this box's previous ping, triggers the sensor. Early, late or duplicate FIREs are refused, never queued:</p>
+<figure class="code"><figcaption><span class="lang">c++</span><span class="path">firmware/src/main.cpp · handle_command(), FIRE after AIM</span></figcaption><pre><code>    if (command.kind == wm::CommandKind::Fire &amp;&amp;
+        transaction.command.kind == wm::CommandKind::Aim) {
+      // consume() permits exactly one FIRE after READY, before lease expiry,
+      // and at least 65 ms after this node&#x27;s previous trigger. An early, expired,
+      // or too-soon FIRE is consumed and rejected, not delayed until it is legal.
+      // Delaying it could make the ping collide with the other node&#x27;s turn.
+      if (transaction.range_ready) {
+        send_result(address, transaction);
+      } else if (!transaction.lease.consume(now, have_ping, last_ping_at, ULTRASONIC_MIN_GAP_MS)) {
+        if (pending_index == static_cast&lt;int&gt;(i)) pending_index = -1;
+        finish(transaction, 0, &quot;INVALID&quot;);
+      } else {
+        acquire(transaction);  // Never queue a FIRE to execute at a later time.
+      }</code></pre></figure>
+<figure class="code"><figcaption><span class="lang">c++</span><span class="path">firmware/src/main.cpp · acquire()</span></figcaption><pre><code>void acquire(Transaction&amp; transaction) {
+  // If ECHO is already high, we cannot associate the next pulse with our own
+  // trigger reliably. Report INVALID without firing; check wiring/old echoes.
+  if (digitalRead(ULTRASONIC_ECHO_PIN) == HIGH) {
+    finish(transaction, 0, &quot;INVALID&quot;);
+    return;
+  }
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+  delayMicroseconds(2);
+  // Record trigger time BEFORE waiting for the echo. A later receipt time on the
+  // laptop would make a moving target appear newer than the actual observation.
+  const uint32_t started_us = micros();
+  const uint32_t sample_ms = millis();
+  last_ping_at = sample_ms;
+  have_ping = true;
+  // A 10 us trigger asks the HC-SR04 to transmit its ultrasonic burst. ECHO&#x27;s
+  // high duration represents the sound&#x27;s outward-and-return travel time.
+  digitalWrite(ULTRASONIC_TRIG_PIN, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
+  // Only acquisition blocks, for at most 25 ms; settling never blocks UDP.
+  const uint32_t duration_us = pulseIn(ULTRASONIC_ECHO_PIN, HIGH, ULTRASONIC_TIMEOUT_US);
+  // age_us includes trigger/acquisition waiting up to result preparation. It is
+  // distinct from duration_us, which is just ECHO&#x27;s high pulse width. Neither
+  // value includes the subsequent Wi-Fi delivery time to the laptop.
+  const uint32_t age_us = micros() - started_us;
+  if (duration_us == 0) {
+    finish(transaction, 0, &quot;TIMEOUT&quot;, sample_ms, age_us);
+    return;
+  }
+  // At nominal room temperature, sound travels about 0.343 mm per microsecond.
+  // Distance is time * speed / 2 because the echo makes a round trip:
+  //   distance_mm = duration_us * 343 / 2000.
+  // Adding 1000 rounds the integer result. Temperature and which body surface
+  // reflected the sound affect real accuracy; this is not body-centre ranging.
+  const uint32_t distance_mm = (duration_us * 343UL + 1000UL) / 2000UL;
+  if (distance_mm &lt; 20 || distance_mm &gt; 4000)
+    finish(transaction, 0, &quot;INVALID&quot;, sample_ms, age_us);
+  else
+    finish(transaction, distance_mm, &quot;OK&quot;, sample_ms, age_us);
+}</code></pre></figure>
+<p>The servo output is ramped every loop pass at 150°/s, so the 73° first move of a calibration takes about half a second instead of slamming the box:</p>
+<figure class="code"><figcaption><span class="lang">c++</span><span class="path">firmware/src/main.cpp · slew_servo()</span></figcaption><pre><code>void slew_servo() {
+  // Called every loop pass: move the PWM output a bounded step toward the
+  // commanded target so a large aim becomes a smooth ramp, never a jump.
+  if (!servo_ready || servo_output_mdeg == current_servo_mdeg) return;
+  const uint32_t now = millis();
+  const uint32_t elapsed = now - last_slew_at;
+  if (elapsed == 0) return;
+  last_slew_at = now;
+  const int32_t max_step = static_cast&lt;int32_t&gt;(min&lt;uint32_t&gt;(elapsed, 50) * slew_rate_mdeg_per_ms);
+  const int32_t delta = current_servo_mdeg - servo_output_mdeg;
+  if (delta &gt; max_step) servo_output_mdeg += max_step;
+  else if (delta &lt; -max_step) servo_output_mdeg -= max_step;
+  else servo_output_mdeg = current_servo_mdeg;
+  write_servo(servo_output_mdeg);
+}</code></pre></figure>
+
+<h2 id="screen">8. What the screen shows</h2>
+<ul>
+<li>The canvas is the playing area: near edge at the top, far edge at the bottom, a 0.25 m grid with labels, the centre cross at the field's middle.</li>
+<li>The x axis is <strong>mirrored</strong>: node 0 sits at field x = 0 but on the player's right when they face the screen, so it is drawn at the right edge. A step to your right moves the dot right.</li>
+<li>Solid cyan dot = fresh measured position. Hollow dot = predicted from the motion model for at most 0.2 s. No dot = lost.</li>
+<li>Keys: <kbd>Space</kbd> search, <kbd>P</kbd> pause/resume (servos park at 90°), <kbd>R</kbd> reset, <kbd>C</kbd> calibrate, <kbd>D</kbd> diagnostics, <kbd>F11</kbd> fullscreen, <kbd>Esc</kbd> quit.</li>
+</ul>
+<pre><code>python3 -m whack --config config.local.json --calibration calibration.local.json --nodes 192.168.0.50 192.168.0.38 --record results/run.csv</code></pre>
+
+<h2 id="numbers">9. What we measured on 22 September</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Stage</th><th>Calibration</th><th>Dot on screen</th><th>Fresh fixes</th><th>Jitter standing</th><th>Reacquire</th></tr></thead>
+<tbody>
+<tr><td>First two-node run, no retry logic</td><td>0 of 3 sweeps completed</td><td>0 %</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>Retries added, sensor mis-aimed</td><td>111/111 in 30 s</td><td>0 %</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>First lock, point-target model</td><td>138/138 in 32 s</td><td>61 %</td><td>4.3 Hz</td><td>7.8 / 3.2 cm</td><td>0.8 s</td></tr>
+<tr><td>Body model, sensors clear of the boxes</td><td>138/138 in 31 s</td><td>75 % over 228 s</td><td>4.9 Hz</td><td>2.2 / 0.7 cm</td><td>0.8 s median</td></tr>
+<tr><td>Walking including the edges</td><td>reused</td><td>50 %</td><td>4.8 Hz</td><td>4.3 / 3.2 cm</td><td>0.8 s / 7.4 s p90</td></tr>
+</tbody></table></div>
+<p>Full timeline and method: <code>docs/mvp1-bench-log-2026-09-22.md</code>. Numbers reproduce with <code>python3 -m tools.session_metrics results/*.csv</code>.</p>
+<div class="note warn">Open items: sensors must sit clear of the enclosure face (inside the box they read the wall at 4–6 cm); node 0's USB link dropped under servo load; node 0's aim needs a trim check; coverage near either box edge is ~20 % with two sensors.</div>
+</main>
+</body>
+</html>
