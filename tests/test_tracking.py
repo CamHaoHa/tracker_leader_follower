@@ -11,6 +11,26 @@ def samples(g, point, now):
 
 
 class TrackingTests(unittest.TestCase):
+    def test_body_radius_restores_centre_from_surface_ranges(self):
+        from whack.tracking import locate
+        g = Geometry(body_radius_m=0.2)
+        centre = (0.5, 1.4)
+        surfaces = [math.dist((x, g.sensor_y), centre) - 0.2 for x in (g.left_x, g.right_x)]
+        x, y = locate(g, *surfaces)
+        self.assertAlmostEqual(x, centre[0], places=3)
+        self.assertAlmostEqual(y, centre[1], places=3)
+        x0, y0 = locate(Geometry(), *surfaces)
+        self.assertLess(y0, centre[1] - 0.15)  # point model lands too near the wall
+
+    def test_scan_path_starts_at_centre_with_small_servo_swings(self):
+        g = Geometry()
+        targets = g.scan_targets()
+        self.assertEqual(targets[0], (g.width / 2, (g.near_y + g.far_y) / 2))
+        aims = [tuple(g.angle(node, p) for node in (0, 1)) for p in targets]
+        swings = [max(abs(b[0]-a[0]), abs(b[1]-a[1])) / 1000 for a, b in zip(aims, aims[1:])]
+        self.assertLess(sum(swings) / len(swings), 20)
+        self.assertEqual(set(targets), set(targets))  # coverage set unchanged by ordering
+
     def test_scan_covers_joint_beams_across_field_and_warning_strip(self):
         for half_angle in (20, 7.5):
             g = Geometry(beam_half_angle_deg=half_angle)

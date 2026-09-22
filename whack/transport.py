@@ -264,7 +264,8 @@ class SimulatedTransport:
         if target is not None:
             x = self.geometry.left_x if node == 0 else self.geometry.right_x
             visible = abs(self.geometry.angle(node, target) - request.angle) <= self.geometry.beam_half_angle_deg * 1000
-            raw = round(math.dist((x, self.geometry.sensor_y), target) * 1000)
+            # The simulated player is a disc: the echo comes from its near surface.
+            raw = round((math.dist((x, self.geometry.sensor_y), target) - self.geometry.body_radius_m) * 1000)
             if visible and 20 <= raw <= 4000:
                 distance, status = raw, "OK"
         flight = distance * 2 / 343000 if status == "OK" else 0.025

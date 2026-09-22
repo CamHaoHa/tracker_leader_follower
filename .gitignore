@@ -19,3 +19,4 @@ calibration.local.json
 graphify-out/cache/
 example-code/graphify-out/
 graphify-out/.graphify_*
+calibration.*.local.json

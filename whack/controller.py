@@ -72,6 +72,7 @@ class Frame:
     samples: dict = field(default_factory=dict)
     firing: int | None = None
     fire_time: float = 0.0
+    aim_sent: float = 0.0  # Last AIM (re)send time; READY loss is retried, not fatal.
 
 
 class Controller:
@@ -105,11 +106,20 @@ class Controller:
     ECHO_TIMEOUT_S = .025
     FIRE_TIMEOUT_S = .25
     AIM_TIMEOUT_S = .95
+    # A lost READY datagram is re-requested; firmware answers a repeated AIM with
+    # READY once settled and never repeats the movement.
+    AIM_RETRY_S = .3
+    # Calibration tolerates a few transient network failures per step before
+    # abandoning the partial map; persistent silence still aborts.
+    CALIBRATION_RETRIES = 3
+    SOFT_FAILURES = 8
     CONFIRM_PAIRS = 2
+    LAYOUT_FIELDS = ("width", "near_y", "far_y", "left_x", "right_x", "sensor_y",
+                     "left_offset_m", "right_offset_m", "beam_half_angle_deg", "calibration_step_deg")
 
     def __init__(self, geometry=None, simulate=False, clock=time.monotonic, transport=None,
                  calibration_path="calibration.local.json", port=4210, node_ips=None,
-                 start_mode="center"):
+                 start_mode="center", start_paused=False):
         """Create the scheduler; no sensor command is sent until poll() runs.
 
         The injected clock/transport let tests exercise the same scheduling
@@ -142,7 +152,14 @@ class Controller:
         self.calibrating = False
         self.calibration_index = 0
         self.calibration_samples = {}
+        self.calibration_failures = 0
+        self.calibration_skipped = 0
         self.calibration_message = ""
+        # Consecutive "sensor busy" replies; a stuck ECHO line must not spin forever.
+        self.soft_failures = 0
+        # start_paused: wait for an explicit Search/Calibrate instead of moving
+        # servos the moment two sensors appear, and return to idle after a sweep.
+        self.paused = self.idle_after_calibration = bool(start_paused)
         self._load_calibration()
 
     @property
@@ -161,7 +178,12 @@ class Controller:
             return
         try:
             profile = json.loads(self.calibration_path.read_text())
-            if profile["version"] != 2 or profile["geometry"] != asdict(self.geometry):
+            saved = profile["geometry"]
+            current = asdict(self.geometry)
+            # Only the physical layout and sweep plan define the map. Tracking
+            # tunables (smoothing, speed, body radius, timing) can change freely.
+            if profile["version"] != 2 or not isinstance(saved, dict) or any(
+                    saved.get(k) != current[k] for k in self.LAYOUT_FIELDS):
                 raise ValueError("Geometry or calibration format changed")
             background = profile["background"]
             expected = {f"{n}:{angles[n]}" for angles in self.geometry.calibration_aims() for n in (0, 1)}
@@ -192,20 +214,75 @@ class Controller:
                                         + self.ECHO_TIMEOUT_S + self.ACOUSTIC_GUARD_S)
         self.pending = None
 
+    def _clear_player(self):
+        self._cancel_frame()
+        self.tracker.reset()
+        self.good_times.clear()
+        self.state, self.scan_index, self.confirmations = "find", 0, 0
+        self.follow_misses, self.local_index = 0, 0
+        self.soft_failures = 0
+        self.find_started, self.lost_at = self.clock(), None
+
     def start_acquisition(self):
-        """Forget the old player estimate and require a fresh two-pair lock.
+        """Search for the player from scratch; also leaves pause/idle.
 
         Keep the calibrated background and any outstanding acoustic hold-off;
         restarting acquisition must not accidentally overlap an earlier ping.
         """
         if self.calibrating:
             return
+        self._clear_player()
+        self.resume()
+
+    def pause(self):
+        """Stop commanding the sensors: servos hold their last aim, nothing pings.
+
+        A calibration in progress is abandoned because a partial map is useless.
+        Pausing never sends a command, so any outstanding acoustic hold-off from
+        the cancelled frame is still respected when work resumes.
+        """
+        if self.paused:
+            return
+        self.paused = True
         self._cancel_frame()
-        self.tracker.reset()
-        self.good_times.clear()
-        self.state, self.scan_index, self.confirmations = "find", 0, 0
-        self.follow_misses, self.local_index = 0, 0
-        self.find_started, self.lost_at = self.clock(), None
+        if self.calibrating:
+            self.calibrating = False
+            self.background = {}
+            self.calibration_message = "Calibration cancelled; retry with the area empty"
+            self.state = "find"
+        self.park_servos()
+
+    def park_servos(self):
+        """Aim both sensors straight out (90 degrees) without pinging.
+
+        Used when pausing, resetting and closing so the boxes are left in their
+        reference position. An AIM never emits ultrasound; its READY reply is
+        ignored because no frame is pending.
+        """
+        for node in (0, 1):
+            address = self.transport.address(node)
+            if not address or self.transport.protocol_version(node) != 2:
+                continue
+            try:
+                self.transport.send(aim(self._next_sequence(), 90000), address)
+            except (OSError, ValueError):
+                pass
+
+    def resume(self):
+        """Allow new measurement frames again after pause()."""
+        if not self.paused:
+            return
+        self.paused = False
+        self.next_send = max(self.next_send, self.clock()+.1)
+
+    def reset(self):
+        """Stop everything and forget the player; stays idle until Search or Calibrate.
+
+        The calibrated background is kept. An in-progress calibration is abandoned.
+        """
+        self.pause()
+        self._clear_player()
+        self.park_servos()
 
     def start_calibration(self):
         """Begin an empty-field sweep after a three-second clearing countdown.
@@ -217,9 +294,12 @@ class Controller:
         if self.simulate or self.calibrating:
             return
         self._cancel_frame()
+        self.paused = False  # A sweep needs frames even when started from idle.
         self.calibrating, self.state = True, "calibration"
         self.calibration_index = 0
         self.calibration_samples = {}
+        self.calibration_failures = 0
+        self.calibration_skipped = 0
         self.background = {}
         self.calibration_message = ""
         self.tracker.reset()
@@ -231,6 +311,13 @@ class Controller:
         """Move the ideal reflector in simulation; hardware ignores this input."""
         if self.simulate and math.isfinite(x) and math.isfinite(y):
             self.transport.target = (x, y)
+
+    def _nearest_scan_index(self, point):
+        """Index of the scan target closest to a field point; centre when unknown."""
+        if point is None:
+            return 0
+        targets = self.geometry.scan_targets()
+        return min(range(len(targets)), key=lambda i: math.dist(targets[i], point))
 
     def _next_sequence(self):
         """Allocate a nonzero 32-bit transaction ID shared by both node commands."""
@@ -294,22 +381,49 @@ class Controller:
             if self.start_mode == "search" or now-self.find_started >= 2.0:
                 self.scan_index = (self.scan_index+1) % len(self.geometry.scan_targets())
 
-    def _fail_frame(self, now, reason):
+    def _fail_frame(self, now, reason, soft=False):
         """Handle transport/timing failure without immediately issuing more work.
+
+        soft: the sensor refused to ping because its ECHO line was still high
+        from a previous no-echo cycle (HC-SR04 modules hold it for up to a few
+        hundred ms). That is neither a lost player nor a broken calibration:
+        re-aim the same target after a short wait. A line stuck high for many
+        cycles escalates to a normal failure so the operator sees it.
 
         Calibration must be complete to be useful, so a failed frame abandons
         that partial map. Tracking can attempt recovery after a short backoff,
         still respecting any longer acoustic hold imposed by _cancel_frame().
         """
         self._cancel_frame()
+        if soft:
+            self.soft_failures += 1
+            if self.soft_failures <= self.SOFT_FAILURES:
+                self.next_send = max(self.next_send, now+.15)
+                return
+            reason = f"{reason}; sensor ECHO stuck, check wiring"
+        self.soft_failures = 0
         if self.calibrating:
-            self.calibrating = False
-            self.background = {}
-            self.calibration_message = f"Calibration interrupted: {reason}; retry with the area empty"
-            self.state = "find"
+            self.calibration_failures += 1
+            if self.calibration_failures <= self.CALIBRATION_RETRIES:
+                # Keep the samples gathered so far; the same step is aimed again.
+                self.calibration_message = f"Retrying calibration step: {reason}"
+            else:
+                self.calibrating = False
+                self.background = {}
+                self.calibration_message = f"Calibration interrupted: {reason}; retry with the area empty"
+                self.state = "find"
         else:
             self._miss(now, reason)
         self.next_send = max(self.next_send, now+.1)
+
+    def _skip_calibration_entry(self, frame):
+        """Treat an unreachable sweep entry as measured with no repeatable echo."""
+        for node in (0, 1):
+            self.calibration_samples.setdefault(f"{node}:{frame.angles[node]}", []).append(None)
+        self.calibration_skipped += 1
+        self._cancel_frame()
+        self.next_send = max(self.next_send, self.clock() + .05)
+        self._complete_calibration({})
 
     def _complete_calibration(self, samples):
         """Collect three pairs per scheduled bearing entry, then save baselines.
@@ -325,6 +439,7 @@ class Controller:
             key = f"{node}:{r.angle_mdeg}"
             self.calibration_samples.setdefault(key, []).append(r.distance_mm/1000 if r.status == "OK" else None)
         self.calibration_index += 1
+        self.calibration_failures = self.soft_failures = 0
         if self.calibration_index < len(self.geometry.calibration_aims())*3:
             return
         background = {k: statistics.median([v for v in vs if v is not None])
@@ -339,7 +454,13 @@ class Controller:
             self.background = {}
             self.calibration_message = f"Could not save calibration: {exc}"
         self.calibrating = False
-        self.start_acquisition()
+        if self.idle_after_calibration:
+            self._clear_player()
+            self.paused = True
+            skipped = f" ({self.calibration_skipped} bearings outside servo travel)" if self.calibration_skipped else ""
+            self.calibration_message = f"Calibration saved{skipped} — press Search to track"
+        else:
+            self.start_acquisition()
 
     def _complete_pair(self, samples, now):
         """Validate a matched pair and advance acquisition or movement following.
@@ -436,6 +557,12 @@ class Controller:
                 if n in f.ready or f.firing is not None or now-f.aim_time > self.AIM_TIMEOUT_S:
                     continue
                 if message.status != "OK":
+                    if self.calibrating:
+                        # Bearing outside this servo's travel: not a fault. Record
+                        # "no background" for both bearings of this entry and move on.
+                        self._skip_calibration_entry(f)
+                        self.node_status[n] = "Bearing outside servo travel; skipped"
+                        continue
                     self.node_status[n] = "Aim rejected; check servo limits"
                     self._fail_frame(now, self.node_status[n])
                 elif message.angle_mdeg == f.angles[n]:
@@ -464,6 +591,10 @@ class Controller:
             # estimation, not synchronized device clocks or measured one-way
             # network latency. Tracker uses these sample times to compensate
             # for player movement between the left and right pings.
+            if message.status == "INVALID" and not message.age_us and not message.sample_ms:
+                # Firmware refused to trigger: ECHO was still high (no-echo hold-off).
+                self._fail_frame(now, "Sensor busy after a missed echo", soft=True)
+                continue
             upper = now-message.age_us/1_000_000
             uncertainty = upper-f.fire_time
             if (message.status == "INVALID" or message.sample_ms is None or uncertainty < -.003
@@ -474,6 +605,7 @@ class Controller:
             f.samples[n] = (message, stamp)
             if len(f.samples) == 2:
                 self.pending = None
+                self.soft_failures = 0
                 self._complete_pair(f.samples, now)
 
     def poll(self):
@@ -494,6 +626,16 @@ class Controller:
                 self._fail_frame(now, "Sensor did not respond")
             elif len(f.ready) < 2 and now-f.aim_time > self.AIM_TIMEOUT_S:
                 self._fail_frame(now, "Servo readiness timed out")
+            elif len(f.ready) < 2 and now-f.aim_sent >= self.AIM_RETRY_S:
+                # Re-request only the missing grants. A duplicate AIM never moves
+                # the servo again; it just repeats READY once settling is over.
+                f.aim_sent = now
+                try:
+                    for n in (0, 1):
+                        if n not in f.ready:
+                            self.transport.send(aim(f.seq, f.angles[n]), f.addresses[n])
+                except (OSError, ValueError) as exc:
+                    self._fail_frame(now, f"Could not aim sensors: {exc}")
         # 2. Both live WM2 identities are required. One range cannot recover a
         # full 2-D point, and a duplicate node ID must not silently change roles.
         addresses = tuple(self.transport.address(n) for n in (0, 1))
@@ -506,6 +648,11 @@ class Controller:
                                        "Upload WM2 tracker firmware" if versions[n] == 1 else
                                        "Waiting for WM2 HELLO" if versions[n] is None else self.node_status[n])
             self.tracker.invalidate("Waiting for two WM2 sensors")
+        else:
+            # HELLO proves the link; a range replaces this text after the first ping.
+            for n in (0, 1):
+                if self.node_status[n].startswith("Waiting for"):
+                    self.node_status[n] = f"Connected {addresses[n][0]}"
         # 3. Give nearby recovery a bounded window measured from acquisition of
         # the last good pair. The visible spot has its own, shorter expiry in
         # Tracker.position(); hiding the spot does not require waiting 500 ms.
@@ -517,20 +664,23 @@ class Controller:
             self.state, self.lost_at = "lost", now
             self.tracker.invalidate("Player lost — searching again")
         elif self.state == "lost" and now-self.lost_at >= .1:
+            # Full search after a lost track, but start it where the player was
+            # last seen: the scan path is spatially ordered, so nearby targets
+            # come first and the sweep widens from there.
+            self.scan_index = self._nearest_scan_index(self.tracker.raw)
             self.tracker.reset()
             self.confirmations = 0
-            self.scan_index = 0
-            self.find_started = now-2.0  # Full search after a lost track.
+            self.find_started = now-2.0
             self.state = "find"
         # 4. Prepare both servo movements together. AIM does not emit ultrasound,
         # so movements may overlap each other and an acoustic hold-off interval.
         # Normal player acquisition needs a usable background calibration; the
         # calibration sweep itself is also allowed through this gate.
         ready = self.simulate or bool(self.background) or self.calibrating
-        if connected and ready and self.state != "lost" and now >= self.next_send:
+        if connected and ready and not self.paused and self.state != "lost" and now >= self.next_send:
             if self.pending is None:
                 angles = self._aim_angles(now)
-                f = Frame(self._next_sequence(), angles, addresses, now)
+                f = Frame(self._next_sequence(), angles, addresses, now, aim_sent=now)
                 self.pending = f
                 try:
                     for n in (0, 1):
@@ -575,6 +725,9 @@ class Controller:
             status = self.calibration_message or "Clear the area, then select Calibrate empty area"
         elif not connected:
             status = "Waiting for two WM2 sensors — check power, firmware and network"
+        if self.paused:
+            status = (self.calibration_message if self.calibration_message.startswith("Calibration saved")
+                      else "Paused — Search (Space) to track, Calibrate (C) for a new map")
         # Use accepted acquisition timestamps for Hz. A fast rendering loop does
         # not imply a fast sensor: many snapshots can share the same last fix.
         rate = ((len(self.good_times)-1)/(self.good_times[-1]-self.good_times[0])
@@ -585,5 +738,9 @@ class Controller:
                         predicted, confidence, age, rate)
 
     def close(self):
-        """Release transport resources; firmware grants expire without more FIREs."""
-        self.transport.close()
+        """Park the servos, then release transport resources."""
+        self._cancel_frame()
+        try:
+            self.park_servos()
+        finally:
+            self.transport.close()

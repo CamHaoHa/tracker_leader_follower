@@ -81,7 +81,14 @@ bool have_ping = false;
 // Bearings use millidegrees (mdeg): 90000 means 90 degrees. World bearings are
 // shared by BOTH nodes: 0 = right (+x), 90 = forward (+y), 180 = left (-x).
 // Servo coordinates may differ after applying mounting reversal and trim.
-int32_t current_servo_mdeg = 90000;
+int32_t current_servo_mdeg = 90000;   // Commanded target in servo coordinates.
+int32_t servo_output_mdeg = 90000;    // Position currently written to the PWM.
+uint32_t last_slew_at = 0;
+// Ramp the pulse width toward the target instead of jumping. A full-speed SG90
+// jump on a 70 degree aim rocks the whole enclosure. 150 deg/s is gentle; a
+// single move only ramps faster when it would not fit the settle cap.
+constexpr uint32_t kServoSlewMdegPerMs = 150;
+uint32_t slew_rate_mdeg_per_ms = kServoSlewMdegPerMs;
 uint32_t current_bearing_mdeg = 90000;
 
 // Cache completed FIRE results verbatim; a UDP retry must not emit another ping.
@@ -302,6 +309,22 @@ void reject(const IPAddress& address, const wm::Command& command) {
   else send_result(address, rejected);
 }
 
+void slew_servo() {
+  // Called every loop pass: move the PWM output a bounded step toward the
+  // commanded target so a large aim becomes a smooth ramp, never a jump.
+  if (!servo_ready || servo_output_mdeg == current_servo_mdeg) return;
+  const uint32_t now = millis();
+  const uint32_t elapsed = now - last_slew_at;
+  if (elapsed == 0) return;
+  last_slew_at = now;
+  const int32_t max_step = static_cast<int32_t>(min<uint32_t>(elapsed, 50) * slew_rate_mdeg_per_ms);
+  const int32_t delta = current_servo_mdeg - servo_output_mdeg;
+  if (delta > max_step) servo_output_mdeg += max_step;
+  else if (delta < -max_step) servo_output_mdeg -= max_step;
+  else servo_output_mdeg = current_servo_mdeg;
+  write_servo(servo_output_mdeg);
+}
+
 void handle_command(const IPAddress& address, const wm::Command& command) {
   const uint32_t now = millis();
   if (have_owner && now - last_command_at >= kSessionIdleMs) reset_session();
@@ -394,15 +417,21 @@ void handle_command(const IPAddress& address, const wm::Command& command) {
   // READY means this timer elapsed, not that an encoder confirmed the position.
   // Store a deadline instead of delay(settle_ms), so Wi-Fi remains responsive
   // and the other ESP32 can be moving at the same time.
-  const uint32_t movement = static_cast<uint32_t>(abs(target_servo_mdeg - current_servo_mdeg));
+  // Movement is measured from where the ramp currently is, so an AIM that
+  // supersedes an unfinished move is timed from the real position estimate.
+  const uint32_t movement = static_cast<uint32_t>(abs(target_servo_mdeg - servo_output_mdeg));
   const uint32_t remaining_ms = reached(now, servo_ready_at) ? 0 : servo_ready_at - now;
   uint32_t settle_ms = 0;
   if (movement != 0) {
-    settle_ms = SERVO_SETTLE_MIN_MS +
-        (static_cast<uint64_t>(movement) * SERVO_SETTLE_MS_PER_DEG + 999) / 1000;
-    // If another AIM superseded an unfinished movement, account for that too.
-    settle_ms = min(settle_ms + remaining_ms, static_cast<uint32_t>(SERVO_SETTLE_MAX_MS));
-    write_servo(target_servo_mdeg);
+    // Ramp at the gentle rate unless that would overrun the settle cap; then
+    // ramp just fast enough to arrive with the minimum settle time to spare.
+    const uint32_t budget_ms = SERVO_SETTLE_MAX_MS - SERVO_SETTLE_MIN_MS;
+    slew_rate_mdeg_per_ms = max(kServoSlewMdegPerMs, (movement + budget_ms - 1) / budget_ms);
+    const uint32_t ramp_ms = (movement + slew_rate_mdeg_per_ms - 1) / slew_rate_mdeg_per_ms;
+    const uint32_t lag_ms = (static_cast<uint64_t>(movement) * SERVO_SETTLE_MS_PER_DEG + 999) / 1000;
+    settle_ms = SERVO_SETTLE_MIN_MS + max(ramp_ms, lag_ms);
+    settle_ms = min(settle_ms, static_cast<uint32_t>(SERVO_SETTLE_MAX_MS));
+    last_slew_at = now;  // slew_servo() ramps the output from here on.
   } else {
     settle_ms = remaining_ms;  // No extra wait for an unchanged, settled servo.
   }
@@ -642,7 +671,9 @@ void setup() {
     if (servo_ready) ledcAttachPin(SERVO_PIN, kServoChannel);
 #endif
     if (servo_ready) {
+      servo_output_mdeg = current_servo_mdeg;  // Boot position unknown: one direct move.
       write_servo(current_servo_mdeg);
+      last_slew_at = millis();
       // The initial physical position is unknown, so preserve the full startup
       // settling allowance even if the first requested angle is also 90 degrees.
       servo_ready_at = millis() + SERVO_SETTLE_MAX_MS;
@@ -679,6 +710,7 @@ void loop() {
   // deadline that just elapsed and a new unchanged-angle AIM ready immediately.
   // There is no autonomous scan or player prediction on the board. Ultrasound
   // happens only for a permitted FIRE (or the retained WM1 measurement command).
+  slew_servo();
   network_tick();
   if (udp_ready) {
     settle_if_ready();

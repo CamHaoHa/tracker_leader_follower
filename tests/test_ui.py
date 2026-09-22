@@ -40,6 +40,12 @@ class Canvas:
     def winfo_height(self): return 600
     def create_oval(self, *args, **kwargs): self.ovals.append((args, kwargs))
     def create_text(self, *args, **kwargs): self.texts.append((args, kwargs))
+    def create_line(self, *args, **kwargs): pass
+    def create_rectangle(self, *args, **kwargs): pass
+
+    @property
+    def overlay_texts(self):
+        return [t for t in self.texts if t[1].get("tags") != "grid"]
 
 
 class DisplayTests(unittest.TestCase):
@@ -75,7 +81,7 @@ class DisplayTests(unittest.TestCase):
         self.assertEqual(window.canvas.ovals[0][1]["outline"], window.PREDICTED_DOT)
         window._tick()
         self.assertEqual(window.canvas.ovals, [])
-        self.assertEqual(window.canvas.texts, [])
+        self.assertEqual(window.canvas.overlay_texts, [])
         self.assertEqual(window.controller.poll.call_count, 3)
         self.assertTrue(all(call.args[0] == 16 for call in window.root.after.call_args_list))
         window.root.bell.assert_not_called()
@@ -93,15 +99,16 @@ class DisplayTests(unittest.TestCase):
                 window._tick()
                 self.assertIsNone(window._position)
                 self.assertEqual(window.canvas.ovals, [])
-                self.assertEqual(window.canvas.texts, [])
+                self.assertEqual(window.canvas.overlay_texts, [])
                 window.root.bell.assert_not_called()
 
     def test_field_boundary_is_visible_and_near_edge_maps_to_top(self):
         window = self.window(snapshot(position=(-.001, .599)))
         window._tick()
         self.assertEqual(window._position, (0, .6))
-        self.assertEqual(window._screen(window._position), (0, 0))
-        self.assertEqual(window._screen((1.5, window.geometry.far_y)), (900, 600))
+        # Mirrored: field x = 0 (the box on the player's right) draws at the right edge.
+        self.assertEqual(window._screen(window._position), (900, 0))
+        self.assertEqual(window._screen((1.5, window.geometry.far_y)), (0, 600))
 
     def test_diagnostics_distinguish_measurements_from_display_refresh(self):
         window = self.window(snapshot(), snapshot(predicted=True, fix_age_s=.22))
@@ -109,12 +116,23 @@ class DisplayTests(unittest.TestCase):
         with patch("whack.ui.time.monotonic", side_effect=(1.0, 1.016)):
             window._tick()
             window._tick()
-        text = window.canvas.texts[0][1]["text"]
+        text = window.canvas.overlay_texts[0][1]["text"]
         self.assertIn("Fresh position updates: 6.2 Hz", text)
         self.assertIn("Display refresh: 62 FPS (includes prediction)", text)
         self.assertIn("220 ms", text)
         self.assertIn("90%", text)
         self.assertEqual(len(window.canvas.ovals), 1)
+
+    def test_pause_toggles_and_reset_delegates(self):
+        window = self.window()
+        window.controller.paused = False
+        window._pause()
+        window.controller.pause.assert_called_once_with()
+        window.controller.paused = True
+        window._pause()
+        window.controller.resume.assert_called_once_with()
+        window._reset()
+        window.controller.reset.assert_called_once_with()
 
     def test_controls_delegate_acquisition_and_calibration(self):
         window = self.window()
