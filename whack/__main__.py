@@ -13,19 +13,20 @@ from .tracking import load_geometry
 
 CSV_FIELDS = (
     "elapsed_s", "x_m", "y_m", "fix_age_s", "in_bounds", "dead_zone",
-    "state", "predicted", "confidence", "update_hz", "status", "left", "right", "aim_x", "aim_y")
+    "state", "predicted", "confidence", "update_hz", "status", "left", "right", "aim_x", "aim_y", "reason")
 
 
 def _finite_age(snapshot):
     return snapshot.fix_age_s if math.isfinite(snapshot.fix_age_s) else None
 
 
-def _record_row(elapsed, snapshot, aim=(None, None)):
+def _record_row(elapsed, snapshot, aim=(None, None), reason=""):
     return (
         round(elapsed, 3), *(snapshot.position or ("", "")), _finite_age(snapshot),
         snapshot.in_bounds, snapshot.dead_zone, snapshot.state, snapshot.predicted,
         snapshot.confidence, snapshot.update_hz, snapshot.status, *snapshot.node_status,
         *("" if v is None else round(v, 3) for v in aim),  # where the servos were last aimed
+        reason,  # tracker's last accept/reject reason, for post-run diagnosis
     )
 
 
@@ -72,7 +73,8 @@ def main(argv=None):
                     aim = getattr(controller, "target", None)
                     if not (isinstance(aim, tuple) and len(aim) == 2):
                         aim = (None, None)
-                    writer.writerow(_record_row(elapsed, snap, aim))
+                    reason = getattr(getattr(controller, "tracker", None), "reason", "")
+                    writer.writerow(_record_row(elapsed, snap, aim, reason if isinstance(reason, str) else ""))
                     logfile.flush()
                     last_record[0] = elapsed
                 return snap
