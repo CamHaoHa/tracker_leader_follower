@@ -82,7 +82,7 @@ class AcquisitionTests(unittest.TestCase):
         bearing1 = c.boxes[1].bearing/1000
         self.assertAlmostEqual(bearing1, 133, delta=6)
 
-    def test_single_box_fix_is_shown_as_predicted_and_less_confident(self):
+    def test_single_box_fix_is_hollow_and_less_confident(self):
         c, clock, t = make()
         # node 1 never sees anything: everything beyond its range
         t.target = lambda now, node: (0.75, 1.3) if node == 0 else None

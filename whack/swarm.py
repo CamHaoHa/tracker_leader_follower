@@ -81,49 +81,36 @@ class Contribution:
     point: tuple             # polar estimate from this box alone
 
 
-class Motion:
-    """Alpha-beta position/velocity filter shared by all contributions."""
+class Estimate:
+    """Smoothed position from the fused fixes. No extrapolation: the spot is
+    the last measured point, lightly smoothed so one noisy ping cannot jump it.
+    Leader-follower aims every box at this point and re-aims when it moves."""
 
     def __init__(self, geometry):
         self.g = geometry
         self.reset()
 
     def reset(self):
-        self.filtered = None
-        self.velocity = (0.0, 0.0)
+        self.point = None
         self.last_good = float("-inf")
         self.confidence = 0.0
 
-    def predict(self, now, horizon=None):
-        if self.filtered is None:
-            return None
-        limit = self.g.prediction_horizon_s if horizon is None else horizon
-        dt = min(max(now - self.last_good, 0.0), limit)
-        return (self.filtered[0] + self.velocity[0]*dt, self.filtered[1] + self.velocity[1]*dt)
-
     def update(self, point, stamp, contributors):
         g = self.g
-        recent = self.filtered is not None and stamp - self.last_good <= g.local_search_s
-        if not recent:
-            self.filtered, self.velocity, residual = point, (0.0, 0.0), 0.0
-        else:
+        recent = self.point is not None and stamp - self.last_good <= g.local_search_s
+        residual = 0.0
+        if recent:
             dt = max(stamp - self.last_good, 0.001)
-            expected = self.predict(stamp, horizon=g.local_search_s)
-            error = (point[0]-expected[0], point[1]-expected[1])
-            residual = math.hypot(*error)
+            residual = math.dist(point, self.point)
             if residual > g.max_speed_m_s*dt + .3:
-                return False
+                return False                      # nobody moves that fast: noise
             alpha = 1.0 if g.smoothing_tau_s == 0 else min(.9, max(.35, 1-math.exp(-dt/g.smoothing_tau_s)))
             # A single-box polar fix is coarse sideways: trust it less.
             if contributors < 2:
                 alpha *= .5
-            beta = .5*alpha*alpha
-            self.filtered = (expected[0]+alpha*error[0], expected[1]+alpha*error[1])
-            velocity = (self.velocity[0]+beta*error[0]/dt, self.velocity[1]+beta*error[1]/dt)
-            speed = math.hypot(*velocity)
-            if speed > g.max_speed_m_s:
-                velocity = (velocity[0]*g.max_speed_m_s/speed, velocity[1]*g.max_speed_m_s/speed)
-            self.velocity = velocity
+            point = (self.point[0] + alpha*(point[0]-self.point[0]),
+                     self.point[1] + alpha*(point[1]-self.point[1]))
+        self.point = point
         self.last_good = stamp
         self.confidence = max(.1, min(1.0, 1.0-residual/.5)) * (1.0 if contributors >= 2 else .5)
         return True
@@ -195,7 +182,7 @@ class SwarmController:
         self.boxes = [Box(n) for n in range(self.count)]
         self.seq = int(time.time()*1000) & MAX_SEQUENCE or 1
         self.step_mdeg = round(self.geometry.sweep_step_deg*1000)
-        self.motion = Motion(self.geometry)
+        self.estimate = Estimate(self.geometry)
         self.contributions: dict[int, Contribution] = {}
         self.good_times = deque(maxlen=12)
         self.acoustic_safe_at = 0.0
@@ -265,7 +252,7 @@ class SwarmController:
         self.calibration_plan = {n: [b for b in self._grid(n) for _ in range(self.PINGS_PER_CALIBRATION_BEARING)]
                                  for n in range(self.count)}
         self.calibration_total = sum(len(v) for v in self.calibration_plan.values())
-        self.motion.reset(); self.contributions.clear()
+        self.estimate.reset(); self.contributions.clear()
         for box in self.boxes:
             box.mode = "sweep"
 
@@ -314,7 +301,7 @@ class SwarmController:
 
     def _clear_player(self):
         self._cancel_all()
-        self.motion.reset(); self.contributions.clear(); self.good_times.clear()
+        self.estimate.reset(); self.contributions.clear(); self.good_times.clear()
         self.state, self.reason, self.alert = "find", "Waiting for measurements", ""
         self.alert_since.clear(); self.outside_since = None; self.too_close_since.clear()
         for box in self.boxes:
@@ -366,8 +353,8 @@ class SwarmController:
         if box.hold_bearing is not None:            # repeat once to confirm a candidate
             b, box.hold_bearing = box.hold_bearing, None
             return b
-        estimate = self.motion.predict(now + g.aim_lead_s, horizon=g.local_search_s)
-        fresh = now - self.motion.last_good <= g.local_search_s
+        estimate = self.estimate.point
+        fresh = now - self.estimate.last_good <= g.local_search_s
         if box.mode == "aimed" and estimate is not None and fresh:
             box.aimed_bearing = self._clamp_travel(box.node, g.angle(box.node, estimate))
             return box.aimed_bearing
@@ -472,7 +459,7 @@ class SwarmController:
         else:
             point, worst = contribution.point, 0.0
         self.contributions = fresh
-        if not self.motion.update(point, contribution.time, len(fresh)):
+        if not self.estimate.update(point, contribution.time, len(fresh)):
             self.reason = "Position jumped"
             return
         self.good_times.append(contribution.time)
@@ -640,7 +627,7 @@ class SwarmController:
         if len(online) < 2:
             self._cancel_all()
         # loss handling
-        if self.state == "track" and now - self.motion.last_good > g.local_search_s:
+        if self.state == "track" and now - self.estimate.last_good > g.local_search_s:
             self.state = "find"
             self.reason = "Player lost — sweeping"
             self.contributions.clear()
@@ -692,9 +679,9 @@ class SwarmController:
         if len(recent) >= 2 and recent[-1] - recent[0] >= self.TWO_PLAYER_S:
             self._raise("Two players detected", now)
             return
-        point = self.motion.predict(now)
+        point = self.estimate.point
         fresh_contrib = [c for c in self.contributions.values() if now - c.time <= self.FUSE_WINDOW_S]
-        fresh = fresh_contrib and now - self.motion.last_good <= g.local_search_s
+        fresh = fresh_contrib and now - self.estimate.last_good <= g.local_search_s
         if point is not None and fresh:
             # A single box only knows the bearing to within its cone, so its fix
             # can poke past an edge while the player is inside. Demand a clear
@@ -715,9 +702,9 @@ class SwarmController:
     def _snapshot(self, now, online, ready_to_run):
         g = self.geometry
         fresh_contrib = sum(1 for c in self.contributions.values() if now - c.time <= self.FUSE_WINDOW_S)
-        position = self.motion.predict(now) if self.state == "track" else None
-        age = max(0.0, now - self.motion.last_good)
-        predicted = position is not None and (age > .05 or fresh_contrib < 2)
+        position = self.estimate.point if self.state == "track" else None
+        age = max(0.0, now - self.estimate.last_good)
+        predicted = position is not None and fresh_contrib < 2   # hollow spot: one box only
         if self.calibrating:
             done, total = self.calibration_progress()
             status = f"Keep area empty — calibrating {done}/{total}"
@@ -739,6 +726,6 @@ class SwarmController:
                 if len(self.good_times) > 1 and age <= g.local_search_s else 0.0)
         in_bounds = position is not None and 0 <= position[0] <= g.width and g.near_y <= position[1] <= g.far_y
         dead_zone = position is not None and 0 <= position[0] <= g.width and position[1] < g.near_y
-        confidence = self.motion.confidence*max(0.0, 1-age/g.prediction_horizon_s) if position else 0.0
+        confidence = self.estimate.confidence*max(0.0, 1-age/g.local_search_s) if position else 0.0
         return Snapshot(position, status, tuple(self.node_status), dead_zone, in_bounds, self.state,
                         predicted, confidence, age, rate, self.alert, fresh_contrib)
