@@ -156,7 +156,8 @@ class HeadlessTests(unittest.TestCase):
         last = snapshots[-1]
         controller.poll.side_effect = lambda: next(values, last)
         output = io.StringIO()
-        with patch("whack.__main__.Controller", return_value=controller) as constructor, \
+        with patch("whack.__main__.Controller", return_value=controller), \
+                patch("whack.__main__.SwarmController", return_value=controller) as constructor, \
                 patch("whack.__main__.time.monotonic", clock), \
                 patch("whack.__main__.time.sleep", clock.sleep), \
                 contextlib.redirect_stdout(output):
