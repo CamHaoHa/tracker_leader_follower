@@ -73,10 +73,29 @@ class Geometry:
     calibration_step_deg: float = 3.0
     # Controller rejects a range if its timing interval has this much uncertainty.
     max_network_delay_s: float = 0.12
+    # --- N-box tracking (whack/swarm.py) ---
+    # Extra sensor x positions on the sensor line, beyond left_x and right_x,
+    # e.g. (0.75,) for a centre box. Node IDs follow the sorted x order.
+    extra_sensor_x: tuple = ()
+    # Per-node sweep bounds in degrees, (low, high), ordered like the sensors.
+    # Empty tuple = defaults: outer boxes cover their side, middle boxes wide.
+    sweep_bounds_deg: tuple = ()
+    sweep_step_deg: float = 5.0
+    # Echoes beyond this are never used to lock; inside the field they are hints.
+    reliable_range_m: float = 1.7
+    # Minimum distance from a sensor before a detection counts (10 cm rule).
+    min_player_range_m: float = 0.10
+    # A player reading must be this much nearer than the empty-room map.
+    background_margin_m: float = 0.15
+    # Dither around the aimed bearing after a miss, then resume sweeping.
+    jitter_deg: float = 8.0
+    jitter_s: float = 1.0
+    # Two reliable detections further apart than this are two bodies.
+    two_player_separation_m: float = 0.6
 
     def __post_init__(self):
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
-               for v in asdict(self).values()):
+               for v in asdict(self).values() if not isinstance(v, (tuple, list))):
             raise ValueError("Geometry values must be finite numbers")
         if not (0 < self.width <= 5 and 0 <= self.left_x < self.right_x <= self.width):
             raise ValueError("Sensor x coordinates must be ordered within the field")
@@ -94,6 +113,44 @@ class Geometry:
             raise ValueError("Range offsets must be within 0.3m")
         if not 0 <= self.body_radius_m <= 0.5:
             raise ValueError("Body radius must be within 0..0.5 m")
+        xs = tuple(self.extra_sensor_x)
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not self.left_x < v < self.right_x for v in xs):
+            raise ValueError("Extra sensors must lie strictly between left_x and right_x")
+        if len(set(xs)) != len(xs):
+            raise ValueError("Extra sensor positions must be distinct")
+        bounds = tuple(tuple(b) for b in self.sweep_bounds_deg)
+        if bounds and (len(bounds) != self.sensor_count or any(
+                len(b) != 2 or not 0 <= b[0] < b[1] <= 180 for b in bounds)):
+            raise ValueError("sweep_bounds_deg needs one (low, high) pair per sensor within 0..180")
+        if not (1 <= self.sweep_step_deg <= 30 and 0.3 <= self.reliable_range_m <= 4
+                and 0.02 <= self.min_player_range_m <= 0.5 and 0 <= self.background_margin_m <= 1
+                and 0 <= self.jitter_deg <= 45 and 0 <= self.jitter_s <= 5
+                and 0.2 <= self.two_player_separation_m <= 3):
+            raise ValueError("Invalid sweep, range or jitter limits")
+
+    @property
+    def sensor_count(self) -> int:
+        return 2 + len(self.extra_sensor_x)
+
+    def sensor_x(self, node: int) -> float:
+        """x position of sensor `node`; nodes are numbered left to right."""
+        xs = sorted((self.left_x, self.right_x, *self.extra_sensor_x))
+        return xs[node]
+
+    def sensor_position(self, node: int) -> tuple[float, float]:
+        return (self.sensor_x(node), self.sensor_y)
+
+    def sweep_bounds(self, node: int) -> tuple[float, float]:
+        """Sweep arc for one box in degrees (world bearings)."""
+        if self.sweep_bounds_deg:
+            lo, hi = self.sweep_bounds_deg[node]
+            return float(lo), float(hi)
+        n = self.sensor_count
+        if node == 0:
+            return 10.0, 100.0
+        if node == n - 1:
+            return 80.0, 170.0
+        return 30.0, 120.0
 
     def angle(self, node: int, point: tuple[float, float]) -> int:
         """Point one sensor toward a field position using atan2(dy, dx).
@@ -104,7 +161,7 @@ class Geometry:
         need a different angle from the left to look at the same player.
         Firmware separately applies that mount's reversal, trim and travel bounds.
         """
-        sx = self.left_x if node == 0 else self.right_x
+        sx = self.sensor_x(node)
         return round(math.degrees(math.atan2(point[1] - self.sensor_y, point[0] - sx)) * 1000)
 
     @lru_cache(maxsize=16)
@@ -227,7 +284,13 @@ class Geometry:
 
 
 def load_geometry(path: str | None) -> Geometry:
-    return Geometry(**json.loads(Path(path).read_text())) if path else Geometry()
+    if not path:
+        return Geometry()
+    data = json.loads(Path(path).read_text())
+    for key in ("extra_sensor_x", "sweep_bounds_deg"):
+        if key in data:
+            data[key] = tuple(tuple(v) if isinstance(v, list) else v for v in data[key])
+    return Geometry(**data)
 
 
 def locate(geometry: Geometry, left_m: float, right_m: float) -> tuple[float, float]:

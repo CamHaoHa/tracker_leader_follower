@@ -13,8 +13,8 @@ class UdpTransport:
     def __init__(self, clock, port=4210, node_ips=None):
         self.clock = clock
         if node_ips:
-            if len(node_ips) != 2 or node_ips[0] == node_ips[1]:
-                raise ValueError("Provide distinct left and right node IP addresses")
+            if len(node_ips) < 2 or len(set(node_ips)) != len(node_ips):
+                raise ValueError("Provide at least two distinct node IP addresses, left to right")
             for ip in node_ips:
                 socket.inet_aton(ip)
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -133,12 +133,14 @@ class SimulatedTransport:
     def __init__(self, clock, geometry):
         self.clock, self.geometry = clock, geometry
         self.target = (geometry.width / 2, (geometry.near_y + geometry.far_y) / 2)
-        self.angles = [90000, 90000]
-        self.aims = [None, None]
-        self.last_ping = [float("-inf"), float("-inf")]
-        self.latest_sequence = [None, None]
-        self.last_command = [float("-inf"), float("-inf")]
-        self.cache = [OrderedDict(), OrderedDict()]
+        n = geometry.sensor_count
+        self.count = n
+        self.angles = [90000] * n
+        self.aims = [None] * n
+        self.last_ping = [float("-inf")] * n
+        self.latest_sequence = [None] * n
+        self.last_command = [float("-inf")] * n
+        self.cache = [OrderedDict() for _ in range(n)]
         self.pending = []
         self.messages = []
         self.sent, self.aim_times, self.ping_times, self.commands = [], [], [], []
@@ -183,10 +185,11 @@ class SimulatedTransport:
     def send(self, data, address):
         now = self.clock()
         self._advance(now)
+        nodes = {self.address(i): i for i in range(self.count)}
         if data in (b"WM2 DISCOVER", b"WM2 DISCOVER\n", b"WM2 DISCOVER\r\n"):
-            if address not in (self.address(0), self.address(1)):
+            if address not in nodes:
                 raise ValueError("Invalid simulator node")
-            node = 0 if address == self.address(0) else 1
+            node = nodes[address]
             self._reply(node, Hello(node, version=2))
             return
         aim_match = re.fullmatch(rb"WM2 AIM ([0-9]{1,10}) ([0-9]{1,6})\r?\n?", data)
@@ -198,9 +201,9 @@ class SimulatedTransport:
         angle = int(aim_match[2]) if aim_match else None
         if not 1 <= seq <= MAX_SEQUENCE or (angle is not None and not 0 <= angle <= 180000):
             raise ValueError("Invalid simulator sequence or angle")
-        if address not in (self.address(0), self.address(1)):
+        if address not in nodes:
             raise ValueError("Invalid simulator node")
-        node = 0 if address == self.address(0) else 1
+        node = nodes[address]
         self.commands.append((now, node, kind, seq, angle))
         if now - self.last_command[node] >= 30:
             self.aims[node] = None
@@ -262,7 +265,7 @@ class SimulatedTransport:
         target = self.target(now) if callable(self.target) else self.target
         distance, status = 0, "TIMEOUT"
         if target is not None:
-            x = self.geometry.left_x if node == 0 else self.geometry.right_x
+            x = self.geometry.sensor_x(node)
             visible = abs(self.geometry.angle(node, target) - request.angle) <= self.geometry.beam_half_angle_deg * 1000
             # The simulated player is a disc: the echo comes from its near surface.
             raw = round((math.dist((x, self.geometry.sensor_y), target) - self.geometry.body_radius_m) * 1000)

@@ -53,11 +53,11 @@ def parse(data: bytes) -> Hello | Range | Ready:
         text = data.decode("ascii")
     except UnicodeDecodeError as exc:
         raise ValueError("Non-ASCII datagram") from exc
-    hello = re.fullmatch(r"WM([12]) HELLO ([01])\n?", text)
+    hello = re.fullmatch(r"WM([12]) HELLO ([0-9])\n?", text)
     if hello:
         return Hello(int(hello[2]), int(hello[1]))
     ready = re.fullmatch(
-        r"WM2 READY ([01]) ([0-9]{1,10}) ([0-9]{1,6}) ([0-9]{1,4}) (OK|INVALID)\n?", text
+        r"WM2 READY ([0-9]) ([0-9]{1,10}) ([0-9]{1,6}) ([0-9]{1,4}) (OK|INVALID)\n?", text
     )
     if ready:
         node, seq, angle, lease = map(int, ready.groups()[:4])
@@ -67,7 +67,7 @@ def parse(data: bytes) -> Hello | Range | Ready:
             raise ValueError("Invalid ready lease/status combination")
         return Ready(node, seq, angle, lease, status)
     match = re.fullmatch(
-        r"WM([12]) RANGE ([01]) ([0-9]{1,10}) ([0-9]{1,6}) ([0-9]{1,4}) (OK|TIMEOUT|INVALID)"
+        r"WM([12]) RANGE ([0-9]) ([0-9]{1,10}) ([0-9]{1,6}) ([0-9]{1,4}) (OK|TIMEOUT|INVALID)"
         r"(?: ([0-9]{1,10}) ([0-9]{1,10}))?\n?", text
     )
     if not match:
