@@ -124,9 +124,9 @@ class AlertTests(unittest.TestCase):
         self.assertTrue(any("too close" in a for a in seen), seen)
 
     def test_player_outside_the_field(self):
-        c, clock, t = make(target=(0.1, 2.15))          # past far_y, still within 1.7 m of box 0
-        seen = alerts_seen(c, clock, 4)
-        self.assertIn("Player outside the field", seen)
+        c, clock, t = make(target=(0.75, 0.55))         # in the 10 cm dead zone, seen by both boxes
+        seen = alerts_seen(c, clock, 5)
+        self.assertIn("Player in the dead zone", seen)
 
     def test_two_players_pause(self):
         c, clock, t = make()
