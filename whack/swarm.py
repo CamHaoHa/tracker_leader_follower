@@ -693,14 +693,19 @@ class SwarmController:
             self._raise("Two players detected", now)
             return
         point = self.motion.predict(now)
-        fresh = self.contributions and now - self.motion.last_good <= g.local_search_s
+        fresh_contrib = [c for c in self.contributions.values() if now - c.time <= self.FUSE_WINDOW_S]
+        fresh = fresh_contrib and now - self.motion.last_good <= g.local_search_s
         if point is not None and fresh:
-            outside = not (-self.OUTSIDE_MARGIN_M <= point[0] <= g.width + self.OUTSIDE_MARGIN_M
-                           and g.near_y - self.OUTSIDE_MARGIN_M <= point[1] <= g.far_y + self.OUTSIDE_MARGIN_M)
+            # A single box only knows the bearing to within its cone, so its fix
+            # can poke past an edge while the player is inside. Demand a clear
+            # margin for one-box fixes; two-box fixes use the tight margin.
+            margin = self.OUTSIDE_MARGIN_M if len(fresh_contrib) >= 2 else self.OUTSIDE_MARGIN_M + .3
+            dead_zone = point[1] < g.near_y - (0 if len(fresh_contrib) >= 2 else .05)
+            outside = dead_zone or not (-margin <= point[0] <= g.width + margin and point[1] <= g.far_y + margin)
             if outside:
                 self.outside_since = self.outside_since or now
                 if now - self.outside_since >= self.OUTSIDE_S:
-                    self._raise("Player outside the field", now)
+                    self._raise("Player in the dead zone" if dead_zone else "Player outside the field", now)
                     return
             else:
                 self.outside_since = None
