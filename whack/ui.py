@@ -26,6 +26,7 @@ class TrackerWindow:
     FONT_DIAGNOSTICS = ("TkDefaultFont", -21)
     FONT_FOOTER = ("TkDefaultFont", -14)
     FONT_BANNER = ("TkDefaultFont", -64, "bold")
+    WARN = "#E08A52"
     GRID = "#1C262A"
     GRID_MAJOR = "#2E3E44"
     FRAME = "#55686F"
@@ -230,6 +231,10 @@ class TrackerWindow:
         if getattr(self.controller, "paused", False) is True:
             canvas.create_text(canvas.winfo_width() / 2, canvas.winfo_height() / 2,
                                text="PAUSED", fill=self.MUTED, font=self.FONT_BANNER, tags="paused")
+        alert = getattr(snapshot, "alert", "") if snapshot else ""
+        if isinstance(alert, str) and alert:
+            canvas.create_text(canvas.winfo_width() / 2, canvas.winfo_height() * 0.18,
+                               text=alert.upper(), fill=self.WARN, font=self.FONT_BANNER, tags="alert")
         if self._diagnostics:
             position = "No current position" if self._position is None else (
                 f"x = {self._position[0]:.3f} m    y = {self._position[1]:.3f} m"
@@ -237,8 +242,8 @@ class TrackerWindow:
             lines = [
                 position,
                 f"State: {snapshot.state.replace('_', ' ')}" if snapshot else "State: waiting",
-                f"Left sensor: {snapshot.node_status[0]}" if snapshot else "Left sensor: waiting",
-                f"Right sensor: {snapshot.node_status[1]}" if snapshot else "Right sensor: waiting",
+                *([f"Box {i}: {status}" for i, status in enumerate(snapshot.node_status)] if snapshot
+                  else ["Boxes: waiting"]),
                 f"Width: {self.geometry.width:g} m",
                 f"Top: {self.geometry.near_y:g} m    Bottom: {self.geometry.far_y:g} m",
             ]

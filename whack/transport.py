@@ -262,7 +262,13 @@ class SimulatedTransport:
         request.fired = True
         self.last_ping[node] = now
         self.ping_times.append((now, node, seq))
-        target = self.target(now) if callable(self.target) else self.target
+        if callable(self.target):
+            try:
+                target = self.target(now, node)      # per-box view, e.g. two reflectors
+            except TypeError:
+                target = self.target(now)
+        else:
+            target = self.target
         distance, status = 0, "TIMEOUT"
         if target is not None:
             x = self.geometry.sensor_x(node)

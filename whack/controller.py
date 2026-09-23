@@ -50,6 +50,8 @@ class Snapshot:
     confidence: float = 0.0
     fix_age_s: float = float("inf")
     update_hz: float = 0.0
+    alert: str = ""            # game-facing pause condition, empty when none
+    contributors: int = 0      # boxes whose fresh ranges built the position
 
 
 @dataclass
