@@ -20,7 +20,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(parse(b"WM2 RANGE 1 12 123000 0 TIMEOUT 0 25000").age_us, 25000)
 
     def test_reject_malformed_and_invalid(self):
-        packets = [b"", b"WM3 HELLO 0", b"WM1 HELLO 2", b"WM1 HELLO 0 EXTRA", b"\xff", b"x"*129,
+        packets = [b"", b"WM3 HELLO 0", b"WM1 HELLO 10", b"WM1 HELLO 0 EXTRA", b"\xff", b"x"*129,
                    b"WM1 RANGE 0 1 90000 0 OK", b"WM1 RANGE 0 1 90000 50 TIMEOUT",
                    b"WM1 RANGE 0 0 90000 50 OK", b"WM1 RANGE 0 4294967296 90000 50 OK",
                    b"WM1 RANGE 0 1 -1 50 OK", b"WM1 RANGE 0 1 180001 50 OK",

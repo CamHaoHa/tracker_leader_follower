@@ -40,7 +40,7 @@ def main(argv=None):
     parser.add_argument("--calibrate", action="store_true", help="Begin empty-area calibration at startup")
     parser.add_argument("--start-mode", choices=("center", "search"), default="center",
                         help="Acquire a player at the field centre or search the whole field (default: center)")
-    parser.add_argument("--nodes", nargs=2, metavar=("LEFT_IP", "RIGHT_IP"), help="Optional fixed node IPv4 addresses")
+    parser.add_argument("--nodes", nargs="+", metavar="IP", help="Optional fixed node IPv4 addresses, left to right")
     parser.add_argument("--port", type=int, default=4210, help="Local UDP port; hardware discovery uses 4210")
     parser.add_argument("--record", help="Write timestamped tracking observations to a CSV file")
     args = parser.parse_args(argv)
