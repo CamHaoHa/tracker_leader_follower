@@ -206,7 +206,7 @@ class TrackerWindow:
         self._update_pause_button()
         self._frame_times.append(time.monotonic())
         self._draw()
-        # ~60 display opportunities/second keep controls and prediction smooth.
+        # ~60 display opportunities/second keep the controls responsive.
         # The hardware updates more slowly; the diagnostics report both rates.
         self._after_id = self.root.after(16, self._tick)
 
@@ -221,8 +221,7 @@ class TrackerWindow:
             x, y = self._screen(self._position)
             radius = 10
             predicted = self.snapshot and self.snapshot.predicted
-            # Controller labels older/extrapolated estimates. A hollow spot makes
-            # their different freshness visible without claiming extra samples.
+            # Swarm: hollow = one box only. Pairs: hollow = extrapolated estimate.
             canvas.create_oval(x - radius, y - radius, x + radius, y + radius,
                                fill="" if predicted else self.DOT,
                                outline=self.PREDICTED_DOT if predicted else "",
@@ -253,9 +252,9 @@ class TrackerWindow:
                 refresh = (len(self._frame_times) - 1) / elapsed if elapsed > 0 else 0
                 lines.extend([
                     f"Fresh position updates: {snapshot.update_hz:.1f} Hz",
-                    f"Display refresh: {refresh:.0f} FPS (includes prediction)",
+                    f"Display refresh: {refresh:.0f} FPS",
                     f"Last measured fix: {age}    Confidence: {snapshot.confidence:.0%}",
-                    "Hollow spot: short prediction; solid spot: measured position.",
+                    "Hollow spot: one box only (pairs mode: extrapolated); solid spot: both boxes agree.",
                 ])
             if not self.simulate:
                 lines.append("Clear the tracking area before pressing C to calibrate.")

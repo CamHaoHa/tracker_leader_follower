@@ -118,7 +118,7 @@ class DisplayTests(unittest.TestCase):
             window._tick()
         text = window.canvas.overlay_texts[0][1]["text"]
         self.assertIn("Fresh position updates: 6.2 Hz", text)
-        self.assertIn("Display refresh: 62 FPS (includes prediction)", text)
+        self.assertIn("Display refresh: 62 FPS", text)
         self.assertIn("220 ms", text)
         self.assertIn("90%", text)
         self.assertEqual(len(window.canvas.ovals), 1)

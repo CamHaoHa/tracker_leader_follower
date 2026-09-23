@@ -1,3 +1,18 @@
+## 2026-09-23 — swarm tracker: no more prediction
+
+- `whack/swarm.py`: the alpha-beta `Motion` filter (velocity + extrapolation) is
+  replaced by `Estimate`, smoothing only. The spot is the last measured point,
+  smoothed with `smoothing_tau_s` (half weight for a one-box fix) and a
+  jump-reject at `max_speed_m_s`. Nothing is extrapolated: leader-follower aims
+  every box at the last fused point and re-aims when it moves 0.3 m, so a
+  velocity guess from noisy one-box fixes only pushed the aim off.
+- Hollow spot now means "one box only" (`contributors < 2`); solid means both
+  boxes agreed within 0.30 m. Confidence fades over `local_search_s`.
+- `aim_lead_s` and `prediction_horizon_s` are no longer used by the swarm
+  tracker (the pairs tracker still uses them).
+- Live run before the change (t 670–867 s of `results/swarm-run2.csv`, walking):
+  dot 85 %, two-box 39 %, one-box 55 %, node 0 timeouts 38 %, node 1 32 %.
+
 ## 2026-09-22 — first bench session with both boxes
 
 See `docs/mvp1-bench-log-2026-09-22.md` for the measured timeline. Summary:
