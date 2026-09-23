@@ -13,7 +13,7 @@
   "max_pair_skew_s": 0.15,
   "prediction_horizon_s": 0.2,
   "aim_lead_s": 0.08,
-  "local_search_s": 0.5,
+  "local_search_s": 1.0,
   "calibration_step_deg": 3.0,
   "max_network_delay_s": 0.12,
   "body_radius_m": 0.18

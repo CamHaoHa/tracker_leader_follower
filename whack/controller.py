@@ -104,7 +104,7 @@ class Controller:
     # expires. A successful reply permits the normal short guard instead.
     ACOUSTIC_GUARD_S = .065
     ECHO_TIMEOUT_S = .025
-    FIRE_TIMEOUT_S = .25
+    FIRE_TIMEOUT_S = .4
     AIM_TIMEOUT_S = .95
     # A lost READY datagram is re-requested; firmware answers a repeated AIM with
     # READY once settled and never repeats the movement.
@@ -373,6 +373,10 @@ class Controller:
         if self.state in ("track", "local_search"):
             self.tracker.invalidate(reason, allow_prediction=True)
             self.state = "local_search"
+        elif self.state == "confirm" and now - self.tracker.last_good <= self.geometry.local_search_s:
+            # One missed echo must not throw away a fresh candidate: keep aiming
+            # at it for the local-search window and try for the second pair.
+            self.tracker.invalidate(reason, allow_prediction=True)
         else:
             self.tracker.reset()
             self.tracker.reason = reason
@@ -494,7 +498,7 @@ class Controller:
             self.state = "track"
             self.local_index = 0
         else:
-            if self.state == "confirm" and (self.tracker.last_good-previous_stamp > .5 or
+            if self.state == "confirm" and (self.tracker.last_good-previous_stamp > self.geometry.local_search_s or
                     previous_point is None or math.dist(previous_point, self.tracker.raw) > .3):
                 self.confirmations = 0
             self.confirmations += 1
