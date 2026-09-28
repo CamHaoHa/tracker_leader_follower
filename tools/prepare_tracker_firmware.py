@@ -18,7 +18,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FIRMWARE = ROOT / "firmware"
 DEFAULT_OUTPUT = FIRMWARE / "arduino"
 HEADERS = ("settings.h", "wm_protocol.h")
-NODES = (("left", 0), ("right", 1), ("middle", 2))
+# Node IDs follow box position left to right. With three boxes the right box is
+# node 2; a two-box layout uses right_pair (node 1) for its right box.
+NODES = (("left", 0), ("middle", 1), ("right", 2), ("right_pair", 1))
 NETWORK_SETTINGS = "tracker_network.local.json"
 CONFIGURED_NETWORK = '''#pragma once
 // Use WIFI_PROFILE and credentials from tracker_config.h.
@@ -190,7 +192,7 @@ def prepare(output: Path = DEFAULT_OUTPUT, *, check: bool = False, network: str 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT,
-                        help="Parent directory for tracker_left, tracker_right and tracker_middle")
+                        help="Parent directory for tracker_left, tracker_middle, tracker_right and tracker_right_pair")
     parser.add_argument("--check", action="store_true",
                         help="Check generated sources are current; do not write files")
     parser.add_argument("--network", choices=("tracker", "configured"),
