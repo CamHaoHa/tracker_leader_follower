@@ -10,6 +10,7 @@ firmware/include/config.local.h
 firmware/arduino/tracker_left/
 firmware/arduino/tracker_right/
 firmware/arduino/tracker_middle/
+firmware/arduino/tracker_right_pair/
 firmware/arduino/tracker_network.local.json
 firmware/arduino/onenet_test/
 firmware/arduino/onenet_udp_test/

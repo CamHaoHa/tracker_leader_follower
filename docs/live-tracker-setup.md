@@ -127,7 +127,8 @@ python3 -m tools.prepare_tracker_firmware --network tracker
 ```
 
 The generator copies the maintained firmware into three independent Arduino sketch
-folders (left, right and an optional middle box) and preconfigures them for the same TrackerNet access point. Re-running
+folders named by box position: left (node 0), middle (node 1) and right (node 2),
+plus right_pair (node 1) for the right box of a two-box layout, and preconfigures them for the same TrackerNet access point. Re-running
 the generator without a network argument refreshes code while retaining your
 configuration and selected network mode.
 
@@ -136,18 +137,18 @@ configuration and selected network mode.
    contains the generated TrackerNet password used by both boards and the laptop.
    Keep it local; the generated folders are ignored by Git.
 3. Select **ESP32 Dev Module**, select the left board's USB port, and upload.
-4. Open `firmware/arduino/tracker_right/tracker_right.ino`, check its servo
-   settings, select the other board's port and upload. Its generated network tab
+4. Three boxes: upload `tracker_middle` (node 1) to the middle board and
+   `tracker_right` (node 2) to the right board. Two boxes: upload
+   `tracker_right_pair` (node 1) to the right board. Each generated network tab
    already matches the left board.
-5. For a third box, open `firmware/arduino/tracker_middle/tracker_middle.ino`
-   (node 2) and upload it the same way.
-6. Open Serial Monitor at **115200 baud**. Each board should print
+5. Open Serial Monitor at **115200 baud**. Each board should print
    `Node 0 ready at ...:4211`, `Node 1 ready ...` or `Node 2 ready ...`. Boot left
-   first and note each other board's assigned IP address.
+   first and note each other board's assigned IP address. Pass the addresses to
+   `--nodes` in left-to-right order.
 
 Every sketch must be regenerated and uploaded for the WM2 AIM/FIRE workflow.
-The sketches have distinct node IDs. Upload the left, right and middle versions
-to different boards. The old `sensor_test.ino` only prints USB distance readings; it
+The sketches have distinct node IDs. Upload each one to the box at its
+position. The old `sensor_test.ino` only prints USB distance readings; it
 cannot receive aiming commands from the tracker.
 
 Join **TrackerNet** on the laptop using the generated password. The PC and both

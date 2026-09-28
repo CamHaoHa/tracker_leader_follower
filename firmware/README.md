@@ -1,8 +1,9 @@
 # ESP32 sensor nodes
 
 Each ESP32 controls **one positional servo carrying one trigger/echo ultrasonic
-sensor**. Manually upload `node_left` to the left unit (node 0) and `node_right`
-to the right unit (node 1). The laptop aims both motors concurrently, then
+sensor**. Manually upload the build named after each box's position: `node_left`
+(node 0), `node_middle` (node 1) and `node_right` (node 2) for three boxes, or
+`node_left` and `node_right_pair` (node 1) for two. The laptop aims all motors concurrently, then
 coordinates ultrasound transmissions in separate turns using **WM2 AIM/FIRE**.
 A board never ranges on its own. The desktop displays one tracked spot and has
 no gameplay logic.
@@ -32,8 +33,8 @@ On classic ESP32 boards, GPIO32 supports the trigger output and GPIO35 is input-
 For Arduino IDE, run
 `python3 -m tools.prepare_tracker_firmware --network tracker` from the project
 root to prepare both boards for TrackerNet. Open
-`firmware/arduino/tracker_left/tracker_left.ino` or
-`firmware/arduino/tracker_right/tracker_right.ino`, check that sketch's
+the sketch named after each box's position (`tracker_left`, `tracker_middle`,
+`tracker_right`, or `tracker_right_pair` for a two-box right box), check that sketch's
 `tracker_config.h` for per-servo calibration, select **ESP32
 Dev Module**, and upload to the matching board. The folders are generated from
 the maintained firmware, and regeneration preserves each local config file.
@@ -122,8 +123,10 @@ Install PlatformIO Core or its VS Code extension, then run from this directory:
 cp include/config.example.h include/config.local.h
 # Edit config.local.h: Wi-Fi credentials and per-node calibration.
 pio run
-pio run -e node_left -t upload --upload-port /dev/ttyUSB0
-pio run -e node_right -t upload --upload-port /dev/ttyUSB1
+pio run -e node_left   -t upload --upload-port /dev/ttyUSB0   # node 0
+pio run -e node_middle -t upload --upload-port /dev/ttyUSB1   # node 1
+pio run -e node_right  -t upload --upload-port /dev/ttyUSB2   # node 2
+# two boxes: node_left + node_right_pair (node 1)
 pio device monitor --port /dev/ttyUSB0 --baud 115200
 ```
 

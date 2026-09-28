@@ -33,10 +33,10 @@
 #if NODE_ID == 0
 #define SERVO_REVERSED 0
 #define SERVO_CENTER_TRIM_MDEG 0
-#elif NODE_ID == 1
+#elif NODE_ID == 1  // middle box, or the right box of a two-box layout
 #define SERVO_REVERSED 0
 #define SERVO_CENTER_TRIM_MDEG 0
-#else  // NODE_ID 2: the middle box
+#else  // NODE_ID 2: the right box of a three-box layout
 #define SERVO_REVERSED 0
 #define SERVO_CENTER_TRIM_MDEG 0
 #endif

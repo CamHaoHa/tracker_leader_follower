@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef NODE_ID
-#error "Build node_left, node_right or node_middle to select NODE_ID"
+#error "Build node_left, node_middle or node_right (node_right_pair for two boxes) to select NODE_ID"
 #endif
 
 #if __has_include("config.local.h")

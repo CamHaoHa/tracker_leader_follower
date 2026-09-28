@@ -10,7 +10,7 @@ still exceeds these temporary limits.
 
 1. Open `firmware/arduino/tracker_left/tracker_left.ino` in Arduino IDE.
 2. Select **ESP32 Dev Module** and the left board's port; upload.
-3. Open `firmware/arduino/tracker_right/tracker_right.ino`, select the right
+3. Open `firmware/arduino/tracker_right_pair/tracker_right_pair.ino` (node 1 in a two-box layout), select the right
    board's port and upload that sketch to it.
 4. Open Serial Monitor at **115200 baud**. Boot the left board first: it creates
    **TrackerNet** at `192.168.4.1`. The right board joins automatically.
