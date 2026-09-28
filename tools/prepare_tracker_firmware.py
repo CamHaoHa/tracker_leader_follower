@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIRMWARE = ROOT / "firmware"
 DEFAULT_OUTPUT = FIRMWARE / "arduino"
 HEADERS = ("settings.h", "wm_protocol.h")
-NODES = (("left", 0), ("right", 1))
+NODES = (("left", 0), ("right", 1), ("middle", 2))
 NETWORK_SETTINGS = "tracker_network.local.json"
 CONFIGURED_NETWORK = '''#pragma once
 // Use WIFI_PROFILE and credentials from tracker_config.h.
@@ -60,7 +60,7 @@ def network_settings(output: Path, *, check: bool) -> dict | None:
 
 def tracker_network_header(settings: dict) -> str:
     return '''#pragma once
-// Shared private Wi-Fi: LEFT creates it, RIGHT joins it; laptop joins manually.
+// Shared private Wi-Fi: LEFT creates it, the other boards join it; laptop joins manually.
 // Generated from ../tracker_network.local.json; keep both files private.
 // To change the SSID/password, edit that JSON then rerun preparation with --network tracker.
 // Home, school and servo settings remain in tracker_config.h.
@@ -82,7 +82,7 @@ def config_template(side: str, node_id: int) -> str:
 // The preparation command preserves this file when refreshing firmware sources.
 #define NODE_ID {node_id}
 
-// Both boards and the computer must use the same reachable Wi-Fi network.
+// All boards and the computer must use the same reachable Wi-Fi network.
 // ESP32-WROOM-32E uses 2.4 GHz Wi-Fi. Enter your network details here.
 #define WIFI_SSID ""
 #define WIFI_PASSWORD ""
@@ -190,7 +190,7 @@ def prepare(output: Path = DEFAULT_OUTPUT, *, check: bool = False, network: str 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT,
-                        help="Parent directory for tracker_left and tracker_right")
+                        help="Parent directory for tracker_left, tracker_right and tracker_middle")
     parser.add_argument("--check", action="store_true",
                         help="Check generated sources are current; do not write files")
     parser.add_argument("--network", choices=("tracker", "configured"),
@@ -208,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  {path}")
             print("Run python3 -m tools.prepare_tracker_firmware to refresh sources.")
             return 1
-        print("Both Arduino sketches are current. User settings were not changed.")
+        print("All Arduino sketches are current. User settings were not changed.")
         return 0
 
     print("Arduino sketches prepared. Existing tracker_config.h settings were preserved.")
@@ -217,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {side.capitalize()}: {output / name / (name + '.ino')}")
     print("Select ESP32 Dev Module and manually upload each sketch to its matching board.")
     if args.network == "tracker":
-        print("Left creates the private Wi-Fi at 192.168.4.1; right joins automatically by DHCP.")
+        print("Left creates the private Wi-Fi at 192.168.4.1; right and middle join automatically by DHCP.")
         print("Connect the laptop using TRACKER_WIFI_SSID / TRACKER_WIFI_PASSWORD in either")
         print("tracker_network.h tab. No internet connection is needed.")
     else:

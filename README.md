@@ -60,7 +60,8 @@ the Python application does not flash a board.
 1. Wire each ESP32, servo and HC-SR04 using [firmware setup](firmware/README.md).
 2. Run `python3 -m tools.prepare_tracker_firmware --network tracker` from the
    project root to prepare both boards for their own **TrackerNet** Wi-Fi.
-   Open the generated `tracker_left` and `tracker_right` sketches in Arduino IDE.
+   Open the generated `tracker_left`, `tracker_right` and, for a third box,
+   `tracker_middle` sketches in Arduino IDE.
 3. Check each servo's calibration in `tracker_config.h`. The generated
    `tracker_network.h` tab contains the shared TrackerNet password. Select
    **ESP32 Dev Module**, then manually upload the

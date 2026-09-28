@@ -14,7 +14,7 @@ class PrepareTrackerFirmwareTests(unittest.TestCase):
             output = Path(tmp)
             prepare(output)
             canonical = (FIRMWARE / "src" / "main.cpp").read_text()
-            for side, node_id in (("left", 0), ("right", 1)):
+            for side, node_id in (("left", 0), ("right", 1), ("middle", 2)):
                 folder = output / f"tracker_{side}"
                 self.assertTrue((folder / f"tracker_{side}.ino").is_file())
                 self.assertTrue((folder / "tracker_node.cpp").read_text().endswith(canonical))
