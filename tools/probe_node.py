@@ -10,7 +10,7 @@ from whack.protocol import MAX_PACKET, MAX_SEQUENCE, Range, measure, parse
 def main():
     parser = argparse.ArgumentParser(description="Point one sensor at a fixed bearing and print repeated ranges")
     parser.add_argument("--ip", required=True, help="Node IPv4 address from USB serial")
-    parser.add_argument("--node", required=True, type=int, choices=(0, 1))
+    parser.add_argument("--node", required=True, type=int, choices=range(10), metavar="{0..9}")
     parser.add_argument("--angle", type=float, default=90, help="Logical degrees; 90 faces away from the wall")
     parser.add_argument("--count", type=int, default=10)
     args = parser.parse_args()
