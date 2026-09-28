@@ -84,8 +84,10 @@ certificate verification; the cause of the failed login remains unconfirmed.
 
 ## Hardware arrangement
 
-Use two independent units, each with one Freenove ESP32-WROOM-32E, one positional
-pan servo and one HC-SR04 fixed to the servo. Both use these GPIO numbers:
+Use two or three independent units, each with one classic ESP32 board (Freenove
+ESP32-WROOM-32E with CH340, or ELEGOO ESP-WROOM-32 with CP2102; same GPIO map),
+one positional pan servo and one HC-SR04 fixed to the servo. All use these GPIO
+numbers:
 
 | Signal | ESP32 GPIO |
 | --- | --- |
@@ -124,8 +126,8 @@ From the project root, prepare the Arduino folders:
 python3 -m tools.prepare_tracker_firmware --network tracker
 ```
 
-The generator copies the maintained firmware into two independent Arduino sketch
-folders and preconfigures them for the same TrackerNet access point. Re-running
+The generator copies the maintained firmware into three independent Arduino sketch
+folders (left, right and an optional middle box) and preconfigures them for the same TrackerNet access point. Re-running
 the generator without a network argument refreshes code while retaining your
 configuration and selected network mode.
 
@@ -137,13 +139,15 @@ configuration and selected network mode.
 4. Open `firmware/arduino/tracker_right/tracker_right.ino`, check its servo
    settings, select the other board's port and upload. Its generated network tab
    already matches the left board.
-5. Open Serial Monitor at **115200 baud**. Each board should print
-   `Node 0 ready at ...:4211` or `Node 1 ready at ...:4211`. Boot left first and
-   note the right board's assigned IP address.
+5. For a third box, open `firmware/arduino/tracker_middle/tracker_middle.ino`
+   (node 2) and upload it the same way.
+6. Open Serial Monitor at **115200 baud**. Each board should print
+   `Node 0 ready at ...:4211`, `Node 1 ready ...` or `Node 2 ready ...`. Boot left
+   first and note each other board's assigned IP address.
 
-Both sketches must be regenerated and uploaded for the WM2 AIM/FIRE workflow.
-The two sketches have distinct node IDs. Upload the left and right versions to
-different boards. The old `sensor_test.ino` only prints USB distance readings; it
+Every sketch must be regenerated and uploaded for the WM2 AIM/FIRE workflow.
+The sketches have distinct node IDs. Upload the left, right and middle versions
+to different boards. The old `sensor_test.ino` only prints USB distance readings; it
 cannot receive aiming commands from the tracker.
 
 Join **TrackerNet** on the laptop using the generated password. The PC and both

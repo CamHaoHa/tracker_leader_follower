@@ -2,7 +2,7 @@
  * ONE BOARD'S PART IN FOLLOWING A PLAYER
  *
  * This file controls one servo and one ultrasonic sensor. NODE_ID selects the
- * left board (0) or right board (1); both run this same program.
+ * left board (0), right board (1) or middle board (2); all run this same program.
  *
  * The movement-tracking calculations live on the LAPTOP:
  *   whack/controller.py coordinates measurements and acquisition/recovery;

@@ -33,7 +33,10 @@
 #if NODE_ID == 0
 #define SERVO_REVERSED 0
 #define SERVO_CENTER_TRIM_MDEG 0
-#else
+#elif NODE_ID == 1
+#define SERVO_REVERSED 0
+#define SERVO_CENTER_TRIM_MDEG 0
+#else  // NODE_ID 2: the middle box
 #define SERVO_REVERSED 0
 #define SERVO_CENTER_TRIM_MDEG 0
 #endif

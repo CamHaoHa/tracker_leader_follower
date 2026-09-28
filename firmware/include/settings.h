@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef NODE_ID
-#error "Build node_left or node_right to select NODE_ID"
+#error "Build node_left, node_right or node_middle to select NODE_ID"
 #endif
 
 #if __has_include("config.local.h")
@@ -93,7 +93,7 @@
 #define ULTRASONIC_MIN_GAP_MS 65
 #endif
 
-static_assert(NODE_ID == 0 || NODE_ID == 1, "NODE_ID must be 0 or 1");
+static_assert(NODE_ID >= 0 && NODE_ID <= 9, "NODE_ID must be 0..9: the wire protocol carries one digit");
 static_assert(WIFI_PROFILE >= 0 && WIFI_PROFILE <= 3,
               "WIFI_PROFILE: 0=home, 1=school personal/hotspot, 2=OneNet PEAP, 3=tracker AP");
 static_assert(TRACKER_WIFI_CHANNEL >= 1 && TRACKER_WIFI_CHANNEL <= 13,
