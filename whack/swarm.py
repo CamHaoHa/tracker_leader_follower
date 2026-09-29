@@ -20,7 +20,9 @@ as before. Servos move concurrently. The wire protocol is unchanged.
 
 Alerts (for the game layer, shown as a banner by the UI): a player nearer
 than min_player_range_m to a box, a player outside the field, and two
-players (two mutually inconsistent reliable detections that persist).
+players (two mutually inconsistent reliable detections that persist). A
+too-close report lasts only while its box keeps reporting it: it is dropped
+when that box goes offline or quiet, and on pause.
 
 Buzzer: while a near-wall alert is up (dead zone, or too close to a box) the
 box named by geometry.buzzer_node is sent WM2 BUZZ again and again, and one
@@ -171,6 +173,7 @@ class SwarmController:
     OUTSIDE_S = .5
     TWO_PLAYER_S = 1.0
     TOO_CLOSE_S = .3
+    TOO_CLOSE_STALE_S = 1.5     # a too-close report is dropped when its box says nothing for this long
     ALERT_LATCH_S = 2.0         # an alert stays up at least this long
     BUZZ_MS = 400               # each BUZZ asks for this much sound...
     BUZZ_INTERVAL_S = .2        # ...and is repeated this often, so one lost packet is not heard
@@ -206,7 +209,8 @@ class SwarmController:
         self.buzz_address = None               # where the sound was last requested
         self.inconsistent = deque(maxlen=32)   # times two boxes disagreed about where the player is
         self.outside_since = None
-        self.too_close_since = {}
+        self.too_close_since = {}              # node -> when it began reporting a player too close
+        self.too_close_seen = {}               # node -> its latest such report
         self.paused = self.idle_after_calibration = bool(start_paused)
         self.calibration_path = Path(calibration_path)
         self.background = {}
@@ -281,6 +285,7 @@ class SwarmController:
         self.paused = True
         self._cancel_all()
         self._silence_buzzer()
+        self._forget_too_close()               # nothing is measured while paused: do not resume on old reports
         if self.calibrating:
             self.calibrating = False
             self.background = {}
@@ -319,7 +324,7 @@ class SwarmController:
         self._silence_buzzer()
         self.estimate.reset(); self.contributions.clear(); self.good_times.clear()
         self.state, self.reason, self.alert = "find", "Waiting for measurements", ""
-        self.alert_since.clear(); self.outside_since = None; self.too_close_since.clear()
+        self.alert_since.clear(); self.outside_since = None; self._forget_too_close()
         for box in self.boxes:
             box.mode, box.hold_bearing, box.last_reading = "sweep", None, None
 
@@ -445,8 +450,9 @@ class SwarmController:
         if kind == "close":
             box.status = f"{d:.2f} m TOO CLOSE"
             self.too_close_since.setdefault(box.node, now)
+            self.too_close_seen[box.node] = now
             return
-        self.too_close_since.pop(box.node, None)
+        self._forget_too_close(box.node)
         if kind == "candidate":
             box.status += " ?"
             box.hold_bearing = message.angle_mdeg        # ping the same bearing again
@@ -682,7 +688,7 @@ class SwarmController:
                     except (OSError, ValueError):
                         box.txn.done = True; box.txn = None; self.firing = None
                     break
-        self._update_alerts(now)
+        self._update_alerts(now, online)
         self._update_buzzer(now)
         return self._snapshot(now, online, ready_to_run)
 
@@ -727,8 +733,20 @@ class SwarmController:
             if self._send_buzz(self.BUZZ_MS, address):
                 self.buzzing, self.buzz_sent_at, self.buzz_address = True, now, address
 
-    def _update_alerts(self, now):
+    def _forget_too_close(self, node=None):
+        if node is None:
+            self.too_close_since.clear(); self.too_close_seen.clear()
+        else:
+            self.too_close_since.pop(node, None); self.too_close_seen.pop(node, None)
+
+    def _update_alerts(self, now, online):
         g = self.geometry
+        # Only a later reading from the same box withdraws its too-close report.
+        # A box that went offline or quiet never sends one, so its report is
+        # dropped here; otherwise the alert, and the buzzer, would never end.
+        for node in [n for n, seen in self.too_close_seen.items()
+                     if n not in online or now - seen > self.TOO_CLOSE_STALE_S]:
+            self._forget_too_close(node)
         close = [n for n, t in self.too_close_since.items() if now - t >= self.TOO_CLOSE_S]
         if close:
             self._raise(f"{self.TOO_CLOSE_ALERT}{close[0]}", now)
