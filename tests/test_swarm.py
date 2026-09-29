@@ -360,15 +360,33 @@ class BuzzerTests(unittest.TestCase):
                 run(c, clock, 1)
                 self.assertEqual(t.buzzes, [])
 
+    def test_a_send_that_recovers_sounds_at_the_next_interval(self):
+        c, clock, t = make(target=self.DEAD_ZONE, buzzer_node=1)
+        send, down = t.send, [True]
+
+        def flaky(data, address):
+            if down[0] and data.startswith(b"WM2 BUZZ"):
+                raise OSError("network unreachable")
+            send(data, address)
+        t.send = flaky
+        poll_while(c, clock, 8, lambda snap: snap.alert == "Player in the dead zone")
+        run(c, clock, .5)
+        self.assertEqual(t.buzzes, [])
+        down[0] = False
+        run(c, clock, .21)
+        self.assertEqual([b[1:] for b in t.buzzes], [(1, 400)])
+        self.assertTrue(t.buzzing(1))
+
     def test_a_failing_send_never_escapes_poll(self):
         for error in (OSError("network unreachable"), ValueError("bad packet")):
             with self.subTest(error=type(error).__name__):
                 c, clock, t = make(target=self.DEAD_ZONE, buzzer_node=1)
-                send, refused = t.send, []
+                send, refused, times = t.send, [], []
 
-                def failing(data, address, error=error, send=send, refused=refused):
+                def failing(data, address, error=error, send=send, refused=refused, times=times,
+                            clock=clock):
                     if data.startswith(b"WM2 BUZZ"):
-                        refused.append(data)
+                        refused.append(data); times.append(clock.now)
                         raise error
                     send(data, address)
                 t.send = failing
@@ -379,6 +397,10 @@ class BuzzerTests(unittest.TestCase):
                 self.assertTrue(refused)
                 self.assertEqual(set(refused), {b"WM2 BUZZ 400"})     # never sounded: no BUZZ 0 owed
                 self.assertGreater(len(t.ping_times), pings)          # tracking carried on
+                # Retried at the BUZZ interval, not on every 10 ms poll.
+                self.assertIn(len(refused), (5, 6), times)
+                gaps = [b-a for a, b in zip(times, times[1:])]
+                self.assertTrue(all(abs(gap-.2) < .011 for gap in gaps), gaps)
 
     def test_buzz_stays_out_of_the_acoustic_schedule(self):
         quiet, clock_q, tq = make(target=self.DEAD_ZONE)

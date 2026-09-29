@@ -205,7 +205,7 @@ class SwarmController:
         self.alert_until = 0.0
         self.alert_since = {}
         self.buzzing = False                   # a BUZZ > 0 was sent and not yet followed by BUZZ 0
-        self.buzz_sent_at = float("-inf")
+        self.buzz_sent_at = float("-inf")      # last attempt to request sound, sent or not
         self.buzz_address = None               # where the sound was last requested
         self.inconsistent = deque(maxlen=32)   # times two boxes disagreed about where the player is
         self.outside_since = None
@@ -709,10 +709,10 @@ class SwarmController:
 
     def _silence_buzzer(self):
         """One BUZZ 0 after the sound was requested; nothing if it never was."""
+        self.buzz_sent_at = float("-inf")     # the next alert sounds without delay
         if not self.buzzing:
             return
         self.buzzing = False
-        self.buzz_sent_at = float("-inf")     # the next alert sounds without delay
         # A lost BUZZ 0 is covered by the box itself: it stops at its deadline.
         self._send_buzz(0, self.buzz_address)
 
@@ -727,11 +727,16 @@ class SwarmController:
                 address = None
         if not address:
             self._silence_buzzer()
-        elif now - self.buzz_sent_at >= self.BUZZ_INTERVAL_S - 1e-9 or address != self.buzz_address:
-            if self.buzzing and address != self.buzz_address:
-                self._silence_buzzer()         # the box moved to another address
-            if self._send_buzz(self.BUZZ_MS, address):
-                self.buzzing, self.buzz_sent_at, self.buzz_address = True, now, address
+            return
+        if self.buzzing and address != self.buzz_address:
+            self._silence_buzzer()             # the box moved: quiet the old address, sound the new at once
+        if now - self.buzz_sent_at < self.BUZZ_INTERVAL_S - 1e-9:
+            return
+        # buzz_sent_at is the time of the last ATTEMPT: a send that fails waits
+        # for the next interval too, instead of being retried on every poll.
+        self.buzz_sent_at = now
+        if self._send_buzz(self.BUZZ_MS, address):
+            self.buzzing, self.buzz_address = True, address
 
     def _forget_too_close(self, node=None):
         if node is None:
