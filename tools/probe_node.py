@@ -4,16 +4,19 @@ import math
 import socket
 import statistics
 import time
-from whack.protocol import MAX_PACKET, MAX_SEQUENCE, Range, measure, parse
+from whack.protocol import MAX_BUZZ_MS, MAX_PACKET, MAX_SEQUENCE, Range, buzz, measure, parse
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Point one sensor at a fixed bearing and print repeated ranges")
     parser.add_argument("--ip", required=True, help="Node IPv4 address from USB serial")
     parser.add_argument("--node", required=True, type=int, choices=range(10), metavar="{0..9}")
     parser.add_argument("--angle", type=float, default=90, help="Logical degrees; 90 faces away from the wall")
     parser.add_argument("--count", type=int, default=10)
-    args = parser.parse_args()
+    parser.add_argument("--buzz", action="store_true",
+                        help="Sound the box's buzzer throughout (middle box). Compare the ranges with a "
+                             "run without it to check that the sound does not disturb the sensor")
+    args = parser.parse_args(argv)
     if not math.isfinite(args.angle) or not 0 <= args.angle <= 180 or not 1 <= args.count <= 1000:
         parser.error("Angle must be 0..180 and count 1..1000")
     try:
@@ -26,6 +29,10 @@ def main():
             distances = []
             print("sequence,angle_deg,distance_mm,status")
             for _ in range(args.count):
+                if args.buzz:
+                    # Renewed before every ping, so the sound never lapses; the
+                    # box stops by itself 2 s after the last one.
+                    sock.sendto(buzz(MAX_BUZZ_MS), address)
                 sequence = sequence % MAX_SEQUENCE + 1
                 sock.sendto(measure(sequence, angle), address)
                 deadline = time.monotonic()+1.0
@@ -51,6 +58,8 @@ def main():
                     if reply.status == "OK":
                         distances.append(reply.distance_mm)
                 time.sleep(.1)
+            if args.buzz:
+                sock.sendto(buzz(0), address)
             if distances:
                 print(f"Valid: {len(distances)}/{args.count}; median: {statistics.median(distances):.1f} mm; "
                       f"range: {min(distances)}..{max(distances)} mm")
