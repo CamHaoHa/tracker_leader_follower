@@ -16,5 +16,9 @@
   "local_search_s": 1.0,
   "calibration_step_deg": 3.0,
   "max_network_delay_s": 0.12,
-  "body_radius_m": 0.18
-}
+  "body_radius_m": 0.18,
+  "servo_travel_deg": [
+    0,
+    180
+  ]
+}\n

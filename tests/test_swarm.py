@@ -44,6 +44,35 @@ def aims(transport, node):
     return [a//1000 for _, n, kind, _, a in transport.commands if kind == "AIM" and n == node]
 
 
+class TravelTests(unittest.TestCase):
+    def test_default_arcs_are_clipped_to_the_servo_travel(self):
+        g = Geometry(servo_travel_deg=(30, 150), extra_sensor_x=(0.75,))
+        self.assertEqual([g.sweep_bounds(n) for n in range(3)], [(30, 100), (30, 120), (80, 150)])
+
+    def test_explicit_arcs_must_fit_the_travel(self):
+        with self.assertRaises(ValueError):
+            Geometry(servo_travel_deg=(30, 150), sweep_bounds_deg=((10, 100), (80, 150)))
+        with self.assertRaises(ValueError):
+            Geometry(servo_travel_deg=(150, 30))
+
+    def test_travel_loads_from_json_as_a_pair(self):
+        from whack.tracking import load_geometry
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g.json"
+            path.write_text(json.dumps({"servo_travel_deg": [30, 150], "sensor_y": 0.5}))
+            self.assertEqual(load_geometry(str(path)).servo_travel_deg, (30, 150))
+
+    def test_aims_never_leave_the_servo_travel(self):
+        # Player near the right wall: node 0's true bearing is ~18 deg, past its 30 deg stop.
+        c, clock, t = make(target=(1.4, 0.95), servo_travel_deg=(30, 150), extra_sensor_x=(0.75,))
+        snap = run(c, clock, 6)
+        self.assertEqual(snap.state, "track")
+        sent = aims(t, 0)
+        self.assertTrue(sent)
+        self.assertTrue(all(30 <= a <= 150 for a in sent), sent)
+        self.assertEqual(c.boxes[0].aimed_bearing, 30000)
+
+
 class SweepTests(unittest.TestCase):
     def test_steps_five_degrees_clockwise_and_bounces_at_bounds(self):
         c, clock, t = make(target=None, sweep_bounds_deg=((12, 97), (80, 170)))
