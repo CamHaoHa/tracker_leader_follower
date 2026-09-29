@@ -90,6 +90,10 @@ NO_BUZZER = '''
 
 
 def config_template(side: str, node_id: int) -> str:
+    # By position, not by node ID: right_pair is node 1 as well, but it is the
+    # right box of a two-box layout and gets no buzzer here. The PlatformIO
+    # build differs: config.example.h sets BUZZER_PIN for NODE_ID 1, so
+    # node_right_pair drives GPIO25. Nothing is wired there in either case.
     buzzer = BUZZER_SETTINGS if side == "middle" else NO_BUZZER
     return f'''#pragma once
 

@@ -1,3 +1,26 @@
+## 2026-09-29 — buzzer: review follow-up
+
+- Swarm: a "Player too close to box n" report is dropped when that box is
+  offline or has reported nothing for 1.5 s, and on pause. Before, only a later
+  reading from the same box withdrew it, so a box that went offline left the
+  alert up and the buzzer sounding for as long as the tracker ran. Resume no
+  longer sounds for a player who stepped back during the pause.
+- Swarm: a BUZZ that fails to send is tried again after 0.2 s, not on every
+  poll.
+- Firmware: `BUZZER_PIN` on GPIO1, GPIO3 (serial) or GPIO6..11 (flash) fails
+  the build. Pin 25 is unaffected.
+- Tools: `python3 -m tools.probe_node ... --buzz` sounds the buzzer during the
+  pings, for the bench check in the buzzer section of
+  `docs/live-tracker-setup.md`.
+- Docs: a box that prints no `Buzzer:` line at boot runs firmware from before
+  the buzzer and ignores `WM2 BUZZ`. In a two-box layout the PlatformIO
+  `node_right_pair` build drives GPIO25 and the generated `tracker_right_pair`
+  sketch does not.
+- Checked without hardware: the four firmware environments build, the native
+  parser test passes, and the Python suite passes (125 tests, run with UDP 4210
+  free). Not yet checked on the boxes: the buzzer itself, and whether its sound
+  changes the middle box's ranges.
+
 ## 2026-09-29 — one pin map for every box, buzzer on the middle box
 
 - Pins: servo GPIO33, TRIG GPIO32 and ECHO GPIO34 on every box (were servo
