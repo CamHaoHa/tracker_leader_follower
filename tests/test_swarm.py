@@ -281,6 +281,56 @@ class BuzzerTests(unittest.TestCase):
         self.assertEqual(snap.alert, "Player too close to box 0")
         self.assertEqual(len(t.buzzes), sent)
 
+    def test_a_box_that_stops_reporting_cannot_keep_the_buzzer_sounding(self):
+        # Only a later reading from box 0 withdraws "too close to box 0". If the
+        # box goes offline or quiet it never sends one: the report must age out.
+        for fault in ("offline", "quiet"):
+            with self.subTest(fault=fault):
+                c, clock, t = self.alarm(target=(0.15, 0.7), text="Player too close to box 0",
+                                         extra_sensor_x=(0.75,))
+                run(c, clock, .5)
+                self.assertTrue(t.buzzing(1))
+                if fault == "offline":
+                    t.address = lambda node: None if node == 0 else (f"sim-{node}", 4211)
+                else:                                              # still listed, replies lost
+                    receive = t.receive
+                    t.receive = lambda receive=receive: [(m, a) for m, a in receive() if m.node != 0]
+                t.target = self.IN_FIELD                           # the player steps back
+                poll_while(c, clock, 5, lambda snap: not snap.alert)
+                self.assertEqual(t.buzzes[-1][1:], (1, 0))
+                self.assertFalse(t.buzzing(1))
+                sent = len(t.buzzes)
+                snap = run(c, clock, 10)                           # boxes 1 and 2 carry on, silently
+                self.assertEqual(snap.alert, "")
+                self.assertEqual(len(t.buzzes), sent)
+                self.assertEqual([d for _, _, d in t.buzzes].count(0), 1)
+                self.assertEqual((c.too_close_since, c.too_close_seen), ({}, {}))
+
+    def test_a_box_that_keeps_reporting_keeps_the_alert(self):
+        c, clock, t = self.alarm(target=(0.15, 0.7), text="Player too close to box 0")
+        self.assertGreater(8, c.TOO_CLOSE_STALE_S + c.ALERT_LATCH_S)
+        for _ in range(800):                                       # well past the ageing limit
+            snap = c.poll(); clock.advance()
+            self.assertEqual(snap.alert, "Player too close to box 0")
+        self.assertTrue(t.buzzing(1))
+        self.assertNotIn(0, [d for _, _, d in t.buzzes])
+
+    def test_resume_is_silent_when_the_player_stepped_back_during_the_pause(self):
+        c, clock, t = self.alarm(target=(0.15, 0.7), text="Player too close to box 0")
+        run(c, clock, .5)
+        c.pause()
+        self.assertEqual(t.buzzes[-1][1:], (1, 0))
+        sent = len(t.buzzes)
+        t.target = self.IN_FIELD
+        snap = run(c, clock, 5)
+        self.assertEqual(snap.alert, "")                           # the banner ends with its latch
+        c.resume()
+        for _ in range(300):
+            snap = c.poll(); clock.advance()
+            self.assertEqual(snap.alert, "")
+        self.assertEqual(snap.state, "track")
+        self.assertEqual(len(t.buzzes), sent)
+
     def test_calibration_start_silences_the_buzzer(self):
         clock = Clock()
         g = Geometry(body_radius_m=0.18, smoothing_tau_s=0.25, local_search_s=1.0, sensor_y=0.5,
