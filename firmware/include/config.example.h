@@ -53,6 +53,17 @@
 #define SERVO_PIN 33
 #define ULTRASONIC_TRIG_PIN 32
 #define ULTRASONIC_ECHO_PIN 34
+
+// Buzzer: middle box only (node 1), + to GPIO25 and - to GND. Boxes without
+// BUZZER_PIN have no buzzer and ignore WM2 BUZZ. In a two-box layout node 1
+// is the right box (node_right_pair): GPIO25 is driven there too.
+// BUZZER_TONE_HZ is the square wave for a passive buzzer; set it to 0 for an
+// active buzzer, which only needs the pin held HIGH.
+#if NODE_ID == 1
+#define BUZZER_PIN 25
+#endif
+#define BUZZER_TONE_HZ 2000
+
 #define SERVO_SETTLE_MIN_MS 60
 #define SERVO_SETTLE_MS_PER_DEG 3
 #define SERVO_SETTLE_MAX_MS 700
