@@ -1,3 +1,36 @@
+## 2026-09-29 — one pin map for every box, buzzer on the middle box
+
+- Pins: servo GPIO33, TRIG GPIO32 and ECHO GPIO34 on every box (were servo
+  GPIO25 and ECHO GPIO35). The sensors are powered from 3V3 and ECHO is wired
+  directly; the divider is gone. GPIO34 is input-only and has no internal pull
+  resistors. Changed in the `settings.h` defaults, `config.example.h`, the
+  `tracker_config.h` template of `tools/prepare_tracker_firmware.py`, the
+  `bench_test` and `sensor_test` sketches, the boot banner and the wiring
+  sections of the READMEs and setup guides. An existing `config.local.h` or
+  `tracker_config.h` keeps its own pins until it is edited by hand.
+- Firmware: optional buzzer. `BUZZER_PIN` defaults to -1 (none) and is 25 for
+  node 1 in `config.example.h`. `BUZZER_TONE_HZ` 2000 is a square wave for a
+  passive buzzer on LEDC channel 2 (10-bit, 50 % duty, duty 0 when silent); 0
+  holds the pin HIGH for an active buzzer. A buzzer pin that is input-only or
+  shared with the servo, trigger or echo fails the build.
+- Protocol: `WM2 BUZZ <duration_ms>`, 0..2000, from the host port only. No
+  sequence, no reply, no ownership, and no effect on aims or firing leases.
+  The box sounds until receipt + duration, each BUZZ replaces the deadline, 0
+  silences at once, and the box silences itself at the deadline. A box without
+  a buzzer ignores it.
+- Laptop: `protocol.buzz()`, `Geometry.buzzer_node` (-1 = none; not a layout
+  field, so saved calibrations stay valid). The swarm tracker sends `BUZZ 400`
+  every 0.2 s while the alert is "Player in the dead zone" or "Player too close
+  to box n", and `BUZZ 0` once when that ends, on pause, reset, calibration
+  start or close. Other alerts are silent. The paired tracker is unchanged.
+- Simulators: `SimulatedTransport` records BUZZ (`.buzzes`, `.buzzing(node)`);
+  `tools/simulate_nodes.py` accepts and ignores it.
+- Config: `"buzzer_node": 1` in `config.example.json`.
+- Checked without hardware: the four firmware environments build, the native
+  parser test passes, and the Python suite passes (119 tests; `test_udp` needs
+  UDP 4210 free, so close the tracker first). The new wiring and the buzzer
+  have not been flashed or run on the boxes yet.
+
 ## 2026-09-23 — swarm tracker: no more prediction
 
 - `whack/swarm.py`: the alpha-beta `Motion` filter (velocity + extrapolation) is

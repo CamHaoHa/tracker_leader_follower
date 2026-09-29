@@ -94,6 +94,7 @@ numbers:
 | Servo signal | 33 |
 | HC-SR04 TRIG | 32 |
 | HC-SR04 ECHO, wired directly | 34 |
+| Buzzer +, middle box only | 25 |
 
 Power each HC-SR04 from the ESP32 3V3 pin and wire ECHO straight to GPIO34:
 there is no divider. GPIO34 is input-only and has no internal pull resistors.
@@ -120,6 +121,53 @@ horizontally toward the torso. Measure your actual layout and set
 The 200 cm limit belongs to the earlier bench sketch. Tracking firmware accepts
 up to 400 cm, because a diagonal path across the default field is approximately
 234 cm. The desktop application filters positions to the configured play area.
+
+## Buzzer
+
+The middle box (node 1) carries a buzzer that warns a player who is too close
+to the screen wall. No other box has one.
+
+| Buzzer lead | Middle box |
+| --- | --- |
+| + | GPIO25 |
+| − | GND |
+
+A GPIO pin supplies only a small current (about 20 mA). A piezo buzzer or a
+buzzer module with its own transistor can be wired as above; anything that
+draws more needs a transistor between the pin and the buzzer.
+
+**What makes it sound.** With `"buzzer_node": 1` in `config.local.json`, the
+default swarm tracker sounds the buzzer while the banner shows **Player in the
+dead zone** or **Player too close to box n**. The sound follows the banner,
+which stays up for at least 2 s after the last such reading. It is silent for
+*Player outside the field* and *Two players detected*, while paused and during
+calibration. Leave `buzzer_node` out, or set it to `-1`, for no buzzer. The
+older `--tracker pairs` never sounds it. With three boxes node 1 is the middle
+box; a two-box layout has no middle box and its node 1 is the right box.
+
+**Failsafe.** While the alert lasts the laptop sends `WM2 BUZZ 400` every 0.2 s,
+then `WM2 BUZZ 0` once. Each command only moves the box's own deadline, and the
+box silences itself when that deadline passes. One command can ask for at most
+2 s, so a laptop that crashes or leaves the network cannot leave the buzzer
+sounding.
+
+**Passive or active buzzer.** The firmware default, `BUZZER_TONE_HZ 2000`, drives
+a passive buzzer with a 2000 Hz square wave. An active buzzer has its own
+oscillator: set `#define BUZZER_TONE_HZ 0` in `config.local.h` (PlatformIO) or
+the middle sketch's `tracker_config.h` (Arduino IDE) and upload the middle box
+again. The pin is then held HIGH while sounding.
+
+`BUZZER_PIN 25` is set for node 1 by `config.example.h` and by a newly generated
+`tracker_middle/tracker_config.h`; add `#define BUZZER_PIN 25` by hand to a
+config file that already exists. At boot the middle box prints
+`Buzzer: pin=25, 2000 Hz tone` and every other box prints `Buzzer: none`.
+
+To hear it without the tracker, close the visualizer (it owns UDP 4210) and
+send one second of sound from the project root, replacing `MIDDLE_BOX_IP`:
+
+```bash
+python3 -c "import socket; from whack.protocol import buzz; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(('0.0.0.0', 4210)); s.sendto(buzz(1000), ('MIDDLE_BOX_IP', 4211))"
+```
 
 ## Upload both tracking sketches in Arduino IDE
 

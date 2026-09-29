@@ -162,7 +162,9 @@ circle intersection, estimates velocity, predicts aiming directions, and uses
 bounded local recovery after missed echoes. **Space/R** restarts acquisition;
 **D** shows measurement age, update rate and confidence. The single spot is solid
 for measured estimates and hollow/dim for short prediction, then disappears when
-lost or outside the field. There are no game zones or warning sounds.
+lost or outside the field. There are no game zones. The only sound is the
+middle box's buzzer, which the default swarm tracker sounds during a near-wall
+alert (see [Buzzer](#buzzer)).
 
 See [the full workflow](../docs/player-tracking-workflow.md). Servo directions,
 human echoes and actual delay must still be tested with the two physical units.
