@@ -9,6 +9,16 @@
   "right_offset_m": 0.0,
   "beam_half_angle_deg": 20.0,
   "max_speed_m_s": 3.0,
-  "smoothing_tau_s": 0.12,
-  "max_pair_skew_s": 0.25
+  "smoothing_tau_s": 0.25,
+  "max_pair_skew_s": 0.15,
+  "prediction_horizon_s": 0.2,
+  "aim_lead_s": 0.08,
+  "local_search_s": 1.0,
+  "calibration_step_deg": 3.0,
+  "max_network_delay_s": 0.12,
+  "body_radius_m": 0.18,
+  "servo_travel_deg": [
+    0,
+    180
+  ]
 }

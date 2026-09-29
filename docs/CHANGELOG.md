@@ -1,4 +1,75 @@
+## 2026-09-23 — swarm tracker: no more prediction
+
+- `whack/swarm.py`: the alpha-beta `Motion` filter (velocity + extrapolation) is
+  replaced by `Estimate`, smoothing only. The spot is the last measured point,
+  smoothed with `smoothing_tau_s` (half weight for a one-box fix) and a
+  jump-reject at `max_speed_m_s`. Nothing is extrapolated: leader-follower aims
+  every box at the last fused point and re-aims when it moves 0.3 m, so a
+  velocity guess from noisy one-box fixes only pushed the aim off.
+- Hollow spot now means "one box only" (`contributors < 2`); solid means both
+  boxes agreed within 0.30 m. Confidence fades over `local_search_s`.
+- `aim_lead_s` and `prediction_horizon_s` are no longer used by the swarm
+  tracker (the pairs tracker still uses them).
+- Live run before the change (t 670–867 s of `results/swarm-run2.csv`, walking):
+  dot 85 %, two-box 39 %, one-box 55 %, node 0 timeouts 38 %, node 1 32 %.
+
+## 2026-09-22 — first bench session with both boxes
+
+See `docs/mvp1-bench-log-2026-09-22.md` for the measured timeline. Summary:
+
+- Controller: lost READY re-requested; calibration tolerates 3 failed frames per step; "sensor busy" `INVALID` (ECHO still high after a no-echo cycle) retried instead of failing; search visits targets along a small-swing path and restarts near the last known position; idle start with Search / Pause / Reset; servos parked at 90° on pause, reset and close; body-radius model (`body_radius_m`) and 0.25 s smoothing; saved maps stay valid across tuning changes; CSV records the aim point.
+- Firmware: servo ramp at 150°/s with READY waiting for the ramp; caps 0–180° in the local config after a 15–165° travel check.
+- UI: 24 px status, five buttons on their own row, PAUSED banner, mirrored x axis, field frame with 0.25 m grid and labels.
+- Tools: `tools/session_metrics.py` summarises recordings.
+- Results: calibration 138 pairs in ~31 s with no aborts after the retry changes; tracking 4–5 fresh fixes/s, ±2 cm standing, 75 % dot coverage over a 228 s walking run; edges near either box remain weak.
+
 # Engineering change log
+
+## Left ESP32 hosts TrackerNet (15 September 2026)
+
+- Added profile 3: the left ESP32 creates a protected access point at
+  192.168.4.1; right ESP32 and laptop join using DHCP. The laptop continues
+  coordinating both sensors and rendering the spot.
+- AP readiness, UDP replies and broadcasts now use the AP interface; home,
+  school personal Wi-Fi and optional OneNet profiles remain available.
+- Added `--network tracker` preparation with a shared private password and
+  preserved original credentials/servo settings. `--network configured`
+  restores the existing profile. Both uploads remain manual.
+- Added credential-pairing/preservation and DHCP discovery regression tests.
+  Actual radio connectivity and motion tracking require the user's hardware test.
+
+## Coordinated live tracking workflow (15 September 2026)
+
+- Implemented WM2 concurrent servo aiming and sequential one-use ultrasonic
+  firing leases, including conservative recovery after lost UDP responses.
+- Added unicast discovery for fixed IPs and six-second connection freshness.
+- Added dense empty-field calibration, two-pair target confirmation,
+  timestamp-aware range alignment, alpha-beta velocity estimation, short
+  prediction, nearby recovery and full search after loss.
+- The window renders one cyan spot; predictions are hollow and expire after
+  200 ms by default. Gameplay, zone warnings and bells are excluded.
+- Preserved home/school network profiles and private settings; regenerated
+  separate Arduino sketches for manual upload.
+- Software tests cover synthetic moving targets, missing echoes, delayed/lost
+  messages, acoustic scheduling and UI behavior. Firmware builds pass on Arduino
+  ESP32 2.x and 3.x. These results do not establish real player accuracy or delay.
+
+## Live tracker setup with the user's hardware
+
+- Identified Freenove ESP32-WROOM-32E boards and HC-SR04 sensors; configured
+  servo GPIO25, TRIG GPIO32 and ECHO GPIO35 through the external divider.
+- Prepared separate Arduino IDE left/right sketches from the maintained node
+  source, with private Wi-Fi/servo settings preserved when regenerating.
+- Added Arduino ESP32 3.x PWM/UDP compatibility while retaining the pinned
+  PlatformIO/core 2.x builds. Both nodes compile with both toolchains.
+- Added an Arduino IDE-to-desktop setup guide and a local geometry file using
+  the documented default placement, pending actual mounting measurements.
+- Closed a simulated scan-coverage gap using additional paired aim directions
+  (39 points for default geometry), and briefly retry the last player aim after
+  missed echoes while immediately hiding invalid position data.
+- Distance reliability/calibration tests are paused at the user's request;
+  completed Excel/serial evidence remains saved. Live servo/player tracking
+  still needs upload, mounting alignment and an empty-area background scan.
 
 ## Baseline
 

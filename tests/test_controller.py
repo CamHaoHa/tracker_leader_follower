@@ -1,11 +1,12 @@
 import json
+import math
 import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
 
 from whack.controller import Controller
-from whack.protocol import Range
+from whack.protocol import Range, Ready
 from whack.tracking import Geometry
 from whack.transport import SimulatedTransport
 
@@ -19,106 +20,285 @@ class Clock:
 def run(controller, clock, seconds):
     result = None
     for _ in range(round(seconds/.01)):
-        result=controller.poll(); clock.advance()
+        result = controller.poll(); clock.advance()
     return result
 
 
 class InjectedTransport(SimulatedTransport):
     inbox = None
     def receive(self):
-        result=self.inbox or []; self.inbox=[]
+        result = self.inbox or []; self.inbox = []
         return result
 
 
 class ControllerTests(unittest.TestCase):
-    def test_simulated_acquisition_and_loss(self):
-        clock=Clock(); c=Controller(simulate=True,clock=clock)
-        snap=run(c,clock,3)
+    def test_two_pairs_confirm_target_and_concurrent_aims_keep_pings_exclusive(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock)
+        confirmed = False
+        for _ in range(300):
+            snap = c.poll(); clock.advance()
+            if c.state == "confirm":
+                confirmed = True
+                self.assertIsNone(snap.position)
+        self.assertTrue(confirmed)
         self.assertTrue(snap.in_bounds)
-        self.assertAlmostEqual(snap.position[0],.75,places=2)
-        c.transport.target=None
-        snap=run(c,clock,2)
-        self.assertIsNone(snap.position)
-        self.assertFalse(snap.in_bounds)
-        self.assertTrue(all(a[1]!=b[1] for a,b in zip(c.transport.sent,c.transport.sent[1:])))
-        self.assertTrue(all(b[0]-a[0]>=.12 for a,b in zip(c.transport.sent,c.transport.sent[1:])))
+        self.assertAlmostEqual(snap.position[0], .75, places=2)
+        self.assertGreater(snap.update_hz, 5)
+        pings = c.transport.ping_times
+        self.assertTrue(all(a[1] != b[1] for a, b in zip(pings, pings[1:])))
+        self.assertTrue(all(b[0]-a[0] >= .065 for a, b in zip(pings, pings[1:])))
+        aims = c.transport.aim_times
+        self.assertTrue(all(a[0] == b[0] for a, b in zip(aims[::2], aims[1::2])))
 
-    def test_acquisition_covers_near_edges_and_deadzone(self):
-        for point in ((0,.6),(1.5,.6),(.05,.65),(1.45,.65),(.75,.4)):
+    def test_acquisition_covers_near_edges_and_front_strip(self):
+        for point in ((0, .6), (1.5, .6), (.05, .65), (1.45, .65), (.75, .4), (.17, .63), (1.33, .63)):
             with self.subTest(point=point):
-                clock=Clock(); c=Controller(Geometry(beam_half_angle_deg=15),simulate=True,clock=clock)
-                c.transport.target=point
-                found=False
+                clock = Clock(); c = Controller(Geometry(beam_half_angle_deg=15), simulate=True,
+                                                clock=clock, start_mode="search")
+                c.transport.target = point
                 for _ in range(6000):
-                    snap=c.poll();clock.advance()
-                    if snap.position is not None:
-                        found=True;break
-                self.assertTrue(found)
-                self.assertEqual(snap.dead_zone,point[1]<.6)
+                    snap = c.poll(); clock.advance()
+                    if snap.position is not None: break
+                self.assertIsNotNone(snap.position)
+                self.assertEqual(snap.dead_zone, point[1] < .6)
+                self.assertEqual(snap.in_bounds, point[1] >= .6)
 
-    def test_wrong_address_sequence_and_stale_pair_rejected(self):
-        clock=Clock(); t=InjectedTransport(clock,Geometry())
-        c=Controller(simulate=True,clock=clock,transport=t)
-        c.poll();node,seq,angle,address,deadline=c.pending
-        for message,source in [(Range(0,seq+1,angle,1300,"OK"),address),
-                               (Range(0,seq,angle,1300,"OK"),("other",4211)),
-                               (Range(1,seq,angle,1300,"OK"),address)]:
-            t.inbox=[(message,source)];c.poll()
-            self.assertEqual(c.pending[1],seq)
-        clock.advance(1.01);c.poll()
+    def test_brief_dropout_predicts_then_recovers_without_full_search(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock)
+        self.assertTrue(run(c, clock, 3).in_bounds)
+        last_good = c.tracker.last_good
+        c.transport.target = None
+        states = []
+        for _ in range(25):
+            snap = c.poll(); clock.advance(); states.append(snap.state)
+            self.assertLessEqual(c.tracker.last_good, last_good+.1)  # An already fired echo may finish.
+            if clock()-c.tracker.last_good > .21:
+                self.assertIsNone(snap.position)
+        self.assertIn("local_search", states)
+        c.transport.target = (.75, 1.3)
+        snap = run(c, clock, .4)
+        self.assertEqual(snap.state, "track")
+        self.assertTrue(snap.in_bounds)
+        self.assertEqual(c.scan_index, 0)
+
+    def test_persistent_dropout_hides_spot_and_resumes_full_search(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock)
+        run(c, clock, 3); c.transport.target = None
+        states = []
+        for _ in range(200):
+            snap = c.poll(); clock.advance(); states.append(snap.state)
+        self.assertIn("lost", states)
+        self.assertEqual(snap.state, "find")
+        self.assertIsNone(snap.position)
+        self.assertGreater(c.scan_index, 0)
+
+    def test_moving_target_remains_live_with_bounded_prediction_error(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock)
+        path = lambda t: (.75+.35*math.sin(.8*t), 1.3+.15*math.sin(.5*t))
+        c.transport.target = path
+        errors = []; fixes = []
+        for _ in range(1500):
+            snap = c.poll()
+            if clock() > 2:
+                self.assertIsNotNone(snap.position)
+                errors.append(math.dist(snap.position, path(clock())))
+                fixes.append(snap.fix_age_s)
+            clock.advance()
+        self.assertLess(max(errors), .065)
+        self.assertLess(max(fixes), .20)
+        self.assertGreater(snap.update_hz, 4)
+
+    def test_wrong_endpoint_sequence_bearing_and_unsolicited_range_rejected(self):
+        clock = Clock(); t = InjectedTransport(clock, Geometry())
+        c = Controller(simulate=True, clock=clock, transport=t)
+        c.poll(); f = c.pending
+        bad = [(Ready(0, f.seq+1, f.angles[0], 1000, "OK"), f.addresses[0]),
+               (Ready(0, f.seq, f.angles[0], 1000, "OK"), ("other", 4211)),
+               (Ready(1, f.seq, f.angles[1], 1000, "OK"), f.addresses[0]),
+               (Ready(0, f.seq, 0, 1000, "OK"), f.addresses[0]),
+               (Range(0, f.seq, f.angles[0], 1300, "OK", 0, 0, 2), f.addresses[0])]
+        for message in bad:
+            t.inbox = [message]; c.poll()
+            self.assertEqual(f.ready, {})
+            self.assertEqual(f.samples, {})
+        clock.advance(1); c.poll()
         self.assertIsNone(c.pending)
-        t.inbox=[(Range(0,seq,angle,1300,"OK"),address)];c.poll()
-        self.assertEqual(c.samples,{})
+        t.inbox = [(Ready(0, f.seq, f.angles[0], 1000, "OK"), f.addresses[0])]
+        c.poll(); self.assertEqual(c.samples, {})
+
+    def test_lost_ready_is_re_requested_instead_of_failing_the_frame(self):
+        class DroppedReady(SimulatedTransport):
+            dropped = None
+            def receive(self):
+                results = super().receive()
+                if self.dropped is None: self.dropped = set()
+                kept = []
+                for m, a in results:
+                    if isinstance(m, Ready) and (m.node, m.seq) not in self.dropped:
+                        self.dropped.add((m.node, m.seq)); continue  # lose the first grant
+                    kept.append((m, a))
+                return kept
+        clock = Clock(); t = DroppedReady(clock, Geometry())
+        c = Controller(simulate=True, clock=clock, transport=t)
+        run(c, clock, 4)
+        aims = [(n, s) for _, n, kind, s, _ in t.commands if kind == "AIM"]
+        self.assertGreater(len(aims), len(set(aims)))
+        self.assertGreaterEqual(len(t.ping_times), 2)
+        self.assertEqual(c.state in ("confirm", "track"), True)
+
+    def test_pause_stops_commands_and_reset_resumes_them(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock); t = c.transport
+        run(c, clock, 1.5)
+        before = len(t.commands); self.assertGreater(before, 0)
+        c.pause()
+        parked = [cmd for cmd in t.commands[before:] if cmd[2] == "AIM" and cmd[4] == 90000]
+        self.assertEqual(sorted(cmd[1] for cmd in parked), [0, 1])  # both servos sent to 90
+        before = len(t.commands)
+        snap = run(c, clock, 1.5)
+        self.assertEqual(len(t.commands), before)
+        self.assertIsNone(c.pending)
+        self.assertIn("Paused", snap.status)
+        c.reset()
+        self.assertTrue(all(cmd[2] == "AIM" and cmd[4] == 90000 for cmd in t.commands[before:]))  # only parking aims
+        before = len(t.commands)
+        run(c, clock, 1.0)
+        self.assertTrue(c.paused); self.assertEqual(len(t.commands), before)  # reset stays idle
+        c.start_acquisition()
+        run(c, clock, 1.5)
+        self.assertFalse(c.paused)
+        self.assertGreater(len(t.commands), before)
+
+    def test_start_paused_waits_for_search_and_idles_after_calibration(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock, start_paused=True); t = c.transport
+        snap = run(c, clock, 1.0)
+        self.assertEqual(t.commands, []); self.assertIn("Search", snap.status)
+        c.start_acquisition(); run(c, clock, 1.0)
+        self.assertGreater(len(t.commands), 0)
+
+    def test_sensor_busy_reply_retries_without_failing_calibration(self):
+        class BusyOnce(SimulatedTransport):
+            busy = None
+            def receive(self):
+                results = super().receive()
+                if self.busy is None: self.busy = set()
+                out = []
+                for m, a in results:
+                    if isinstance(m, Range) and m.seq % 3 == 0 and (m.node, m.seq) not in self.busy:
+                        self.busy.add((m.node, m.seq))
+                        out.append((Range(m.node, m.seq, m.angle_mdeg, 0, "INVALID", 0, 0, 2), a))
+                    else:
+                        out.append((m, a))
+                return out
+        with tempfile.TemporaryDirectory() as temp:
+            clock = Clock(); t = BusyOnce(clock, Geometry()); t.target = None
+            c = Controller(clock=clock, transport=t, calibration_path=Path(temp)/"cal.json")
+            c.start_calibration(); run(c, clock, 240)
+            self.assertFalse(c.calibrating); self.assertTrue(c.background)
+            self.assertNotIn("interrupted", c.calibration_message)
+
+    def test_calibration_skips_bearings_outside_servo_travel(self):
+        class LimitedServo(SimulatedTransport):
+            def receive(self):
+                out = []
+                for m, a in super().receive():
+                    if isinstance(m, Ready) and m.node == 0 and m.angle_mdeg < 15000:
+                        m = Ready(m.node, m.seq, m.angle_mdeg, 0, "INVALID")
+                    out.append((m, a))
+                return out
+        with tempfile.TemporaryDirectory() as temp:
+            clock = Clock(); t = LimitedServo(clock, Geometry()); t.target = None
+            path = Path(temp)/"cal.json"
+            c = Controller(clock=clock, transport=t, calibration_path=path, start_paused=True)
+            c.start_calibration(); run(c, clock, 300)
+            self.assertFalse(c.calibrating); self.assertTrue(c.background); self.assertTrue(path.exists())
+            self.assertGreater(c.calibration_skipped, 0)
+            self.assertIn("outside servo travel", c.calibration_message)
+            self.assertEqual(Controller(clock=clock, transport=t, calibration_path=path).background, c.background)
+
+    def test_lost_fire_reply_holds_other_sensor_until_entire_lease_expires(self):
+        class DroppedReply(SimulatedTransport):
+            ready_deadlines = None
+            def receive(self):
+                results = super().receive()
+                if self.ready_deadlines is None: self.ready_deadlines = {}
+                for m, _ in results:
+                    if isinstance(m, Ready):
+                        self.ready_deadlines[(m.node, m.seq)] = self.clock()+m.lease_ms/1000
+                return [(m, a) for m, a in results if not isinstance(m, Range)]
+        clock = Clock(); t = DroppedReply(clock, Geometry())
+        c = Controller(simulate=True, clock=clock, transport=t)
+        run(c, clock, 3)
+        self.assertGreaterEqual(len(t.ping_times), 2)
+        for a, b in zip(t.ping_times, t.ping_times[1:]):
+            self.assertGreaterEqual(b[0], t.ready_deadlines[(a[1], a[2])]+.09-1e-6)
+        self.assertIsNone(c.tracker.position(clock()))
+
+    def test_timestamp_uncertainty_rejected_without_localizing(self):
+        class Delayed(SimulatedTransport):
+            def receive(self):
+                results = super().receive()
+                return [(Range(m.node, m.seq, m.angle_mdeg, m.distance_mm, m.status,
+                               m.sample_ms, 1_000_000, 2) if isinstance(m, Range) else m, a)
+                        for m, a in results]
+        clock = Clock(); c = Controller(simulate=True, clock=clock, transport=Delayed(clock, Geometry()))
+        self.assertIsNone(run(c, clock, 3).position)
+        self.assertEqual(c.tracker.last_good, -math.inf)
+
+    def test_legacy_firmware_and_absent_nodes_cannot_start_acoustic_test(self):
+        class Legacy(SimulatedTransport):
+            def protocol_version(self, node): return 1 if node == 1 else 2
+        clock = Clock(); t = Legacy(clock, Geometry()); c = Controller(simulate=True, clock=clock, transport=t)
+        snap = run(c, clock, 3)
+        self.assertEqual(t.commands, [])
+        self.assertIn("Upload WM2", snap.node_status[1])
 
     def test_hardware_requires_calibration_and_bad_profile_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
-            clock=Clock();t=SimulatedTransport(clock,Geometry())
-            path=Path(temp)/"cal.json"
-            c=Controller(clock=clock,transport=t,calibration_path=path)
-            self.assertIn("Calibrate",c.poll().status)
-            self.assertEqual(t.sent,[])
-            path.write_text(json.dumps({"version":1,"geometry":asdict(Geometry()),"background":{"0:90":float('nan')}}))
-            c=Controller(clock=clock,transport=t,calibration_path=path)
-            self.assertEqual(c.background,{})
+            clock = Clock(); t = SimulatedTransport(clock, Geometry()); path = Path(temp)/"cal.json"
+            c = Controller(clock=clock, transport=t, calibration_path=path)
+            self.assertIn("Calibrate", c.poll().status); self.assertEqual(t.sent, [])
+            path.write_text(json.dumps({"version": 1, "geometry": asdict(Geometry()), "background": {"0:90": float("nan")}}))
+            self.assertEqual(Controller(clock=clock, transport=t, calibration_path=path).background, {})
 
-    def test_calibration_timeout_echo_is_empty_but_dropped_packet_aborts(self):
+    def test_calibration_empty_echoes_persist_but_dropped_packet_aborts(self):
         with tempfile.TemporaryDirectory() as temp:
-            clock=Clock();t=SimulatedTransport(clock,Geometry());t.target=None
-            path=Path(temp)/"cal.json"
-            c=Controller(clock=clock,transport=t,calibration_path=path)
-            c.start_calibration();run(c,clock,120)
+            clock = Clock(); t = SimulatedTransport(clock, Geometry()); t.target = None
+            path = Path(temp)/"cal.json"
+            c = Controller(clock=clock, transport=t, calibration_path=path)
+            c.start_calibration(); run(c, clock, 120)
             self.assertFalse(c.calibrating)
-            self.assertTrue(path.exists())
-            self.assertTrue(c.background)
+            self.assertTrue(path.exists()); self.assertTrue(c.background)
             self.assertTrue(all(v is None for v in c.background.values()))
-            t=InjectedTransport(clock,Geometry());c=Controller(clock=clock,transport=t,calibration_path=path)
-            c.start_calibration();run(c,clock,5)
-            self.assertFalse(c.calibrating)
-            self.assertFalse(c.background)
-            self.assertIn("interrupted",c.poll().status)
+            reloaded = Controller(clock=clock, transport=t, calibration_path=path)
+            self.assertEqual(reloaded.background, c.background)
+            t = InjectedTransport(clock, Geometry()); c = Controller(clock=clock, transport=t, calibration_path=path)
+            c.start_calibration(); run(c, clock, 5)
+            # Transient silence is retried a few times before the map is abandoned.
+            self.assertTrue(c.calibrating); self.assertIn("Retrying", c.calibration_message)
+            run(c, clock, 5)
+            self.assertFalse(c.calibrating); self.assertFalse(c.background)
+            self.assertIn("interrupted", c.poll().status)
 
-    def test_starting_calibration_discards_in_flight_tracking_measurement(self):
+    def test_calibration_cancels_in_flight_samples_and_waits_for_lease(self):
         with tempfile.TemporaryDirectory() as temp:
-            clock=Clock();t=SimulatedTransport(clock,Geometry());t.target=None
-            c=Controller(simulate=True,clock=clock,transport=t,calibration_path=Path(temp)/"cal.json")
-            c.poll();c.simulate=False;c.start_calibration()
-            run(c,clock,2)
-            self.assertEqual(c.samples,{})
-            self.assertEqual(c.calibration_index,0)
+            clock = Clock(); t = SimulatedTransport(clock, Geometry())
+            c = Controller(simulate=True, clock=clock, transport=t, calibration_path=Path(temp)/"cal.json")
+            for _ in range(100):
+                c.poll()
+                if c.pending and c.pending.firing is not None: break
+                clock.advance()
+            c.simulate = False; c.start_calibration()
+            run(c, clock, 2)
+            self.assertEqual(c.samples, {}); self.assertEqual(c.calibration_index, 0)
+            self.assertEqual(len(t.ping_times), 1)
 
-    def test_unprofiled_bearing_never_bypasses_background_filter(self):
-        clock=Clock(); c=Controller(simulate=True,clock=clock)
-        c.background={"0:90000":1.5}
-        self.assertFalse(c._foreground((Range(0,1,60000,1000,"OK"),0)))
-        self.assertFalse(c._foreground((Range(0,1,90000,1400,"OK"),0)))
-        self.assertTrue(c._foreground((Range(0,1,90000,1000,"OK"),0)))
-
-    def test_invalid_servo_reply_can_report_unchanged_angle(self):
-        clock=Clock();t=InjectedTransport(clock,Geometry());c=Controller(simulate=True,clock=clock,transport=t)
-        c.poll();node,seq,angle,address,_=c.pending
-        t.inbox=[(Range(node,seq,90000,0,"INVALID"),address)];c.poll()
-        self.assertIsNone(c.pending)
-        self.assertEqual(c.node_status[0],"invalid")
+    def test_dense_background_bearings_reject_walls_and_unprofiled_angles(self):
+        clock = Clock(); c = Controller(simulate=True, clock=clock)
+        c.background = {"0:90000": 1.5, "0:93000": 1.8, "0:99000": None}
+        def fg(angle, distance): return c._foreground((Range(0, 1, angle, distance, "OK"), 0))
+        self.assertFalse(fg(60000, 1000)); self.assertFalse(fg(90000, 1400))
+        self.assertTrue(fg(90000, 1000)); self.assertTrue(fg(91000, 1000))
+        self.assertFalse(fg(91500, 1400)); self.assertFalse(fg(95000, 1000))
 
 
 if __name__ == "__main__": unittest.main()

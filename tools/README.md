@@ -1,4 +1,42 @@
-# UDP sensor emulator
+# Sensor tools
+
+## Prepare the left-hosted tracker network
+
+```bash
+python3 -m tools.prepare_tracker_firmware --network tracker
+```
+
+This prepares matching left/right Arduino sketches for **TrackerNet**. It saves
+one shared random password in the ignored `firmware/arduino/tracker_network.local.json`
+and copies the network selection into each sketch's `tracker_network.h` tab.
+That tab shows the password to enter on the laptop. To change SSID, password or
+channel, edit the JSON and run the same preparation command again.
+
+Your original `tracker_config.h` credentials and servo settings are preserved.
+A normal preparation without `--network` preserves the network selection;
+`--network configured` restores the profile selected in `tracker_config.h`.
+Upload both sketches manually after any change. The generator never connects
+to or flashes either board. Use `--check --network tracker` to check files without
+creating credentials or changing settings.
+
+See [live setup](../docs/live-tracker-setup.md) for joining the Wi-Fi and running
+the spot display.
+
+## Record a real sensor test to Excel
+
+Upload the Arduino `firmware/arduino/sensor_test/sensor_test.ino` sketch, then close
+Serial Monitor and Serial Plotter. From the project root:
+
+```bash
+python3 -m tools.record_sensor_test --sensor A --distance-cm 25 --samples 30
+```
+
+This records USB serial measurements and saves a new timestamped folder under
+`evidence/`, with an Excel report, CSV, original serial log, and metadata. The
+distance argument is the measured true target gap, not a sensor command. See
+[evidence instructions](../evidence/README.md) for port selection and partial runs.
+
+## UDP sensor emulator
 
 `simulate_nodes.py` runs two independent UDP endpoints with the same messages as the ESP32 firmware. Use it to exercise discovery, network acquisition, tracking, and disconnection without physical sensors:
 

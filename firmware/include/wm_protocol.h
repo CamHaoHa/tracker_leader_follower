@@ -6,9 +6,12 @@
 
 namespace wm {
 
+enum class CommandKind { Measure, Aim, Fire, Discover };
+
 struct Command {
   uint32_t sequence;
   uint32_t bearing_mdeg;
+  CommandKind kind = CommandKind::Measure;
 };
 
 // Length-delimited parsing rejects embedded NULs, signs, floats, overflow,
@@ -28,15 +31,29 @@ inline bool decimal(const char* data, size_t length, size_t& pos, uint32_t& out)
 }
 
 inline bool parse(const char* data, size_t length, Command& out) {
-  constexpr char prefix[] = "WM1 MEASURE ";
-  constexpr size_t prefix_length = sizeof(prefix) - 1;
-  if (length < prefix_length || memcmp(data, prefix, prefix_length) != 0) return false;
-  size_t pos = prefix_length;
   Command command{};
-  if (!decimal(data, length, pos, command.sequence) || command.sequence == 0) return false;
-  if (pos >= length || data[pos++] != ' ') return false;
-  if (!decimal(data, length, pos, command.bearing_mdeg) || command.bearing_mdeg > 180000)
+  size_t pos = 0;
+  if (length >= 12 && memcmp(data, "WM1 MEASURE ", 12) == 0) {
+    pos = 12;
+  } else if (length >= 8 && memcmp(data, "WM2 AIM ", 8) == 0) {
+    pos = 8;
+    command.kind = CommandKind::Aim;
+  } else if (length >= 9 && memcmp(data, "WM2 FIRE ", 9) == 0) {
+    pos = 9;
+    command.kind = CommandKind::Fire;
+  } else if (length >= 12 && memcmp(data, "WM2 DISCOVER", 12) == 0) {
+    pos = 12;
+    command.kind = CommandKind::Discover;
+  } else {
     return false;
+  }
+  if (command.kind != CommandKind::Discover &&
+      (!decimal(data, length, pos, command.sequence) || command.sequence == 0)) return false;
+  if (command.kind == CommandKind::Measure || command.kind == CommandKind::Aim) {
+    if (pos >= length || data[pos++] != ' ') return false;
+    if (!decimal(data, length, pos, command.bearing_mdeg) || command.bearing_mdeg > 180000)
+      return false;
+  }
   // A single optional line terminator is accepted for manual UDP testing.
   if (pos < length && data[pos] == '\r') ++pos;
   if (pos < length && data[pos] == '\n') ++pos;
@@ -49,6 +66,32 @@ inline bool newer(uint32_t candidate, uint32_t previous) {
   const uint32_t delta = candidate - previous;
   return delta != 0 && delta < UINT32_C(0x80000000);
 }
+
+// A READY grants exactly one immediate FIRE. Retrying READY never changes the
+// deadline, and even an early/expired FIRE consumes the sequence without a ping.
+// All arithmetic remains valid across millis() wrap (leases are under 2^31 ms).
+struct FireLease {
+  uint32_t deadline = 0;
+  bool ready = false;
+  bool consumed = false;
+
+  void settle(uint32_t now, uint32_t duration_ms = 1000) {
+    if (!ready && !consumed) {
+      deadline = now + duration_ms;
+      ready = true;
+    }
+  }
+  uint32_t remaining(uint32_t now) const {
+    if (!ready || consumed || static_cast<int32_t>(deadline - now) <= 0) return 0;
+    return deadline - now;
+  }
+  bool consume(uint32_t now, bool have_ping, uint32_t last_ping, uint32_t gap_ms) {
+    const bool allowed = remaining(now) != 0 && (!have_ping || now - last_ping >= gap_ms);
+    consumed = true;
+    return allowed;
+  }
+  void revoke() { consumed = true; }
+};
 
 inline bool servo_position(uint32_t bearing_mdeg, bool reverse, int32_t trim_mdeg,
                            int32_t minimum, int32_t maximum, int32_t& position) {

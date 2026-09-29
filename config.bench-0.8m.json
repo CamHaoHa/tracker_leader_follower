@@ -1,0 +1,19 @@
+{
+  "width": 0.8,
+  "near_y": 1.2,
+  "far_y": 1.8,
+  "left_x": 0.0,
+  "right_x": 0.8,
+  "sensor_y": 0.2,
+  "left_offset_m": 0.0,
+  "right_offset_m": 0.0,
+  "beam_half_angle_deg": 20.0,
+  "max_speed_m_s": 3.0,
+  "smoothing_tau_s": 0.12,
+  "max_pair_skew_s": 0.25,
+  "prediction_horizon_s": 0.2,
+  "aim_lead_s": 0.08,
+  "local_search_s": 0.5,
+  "calibration_step_deg": 3.0,
+  "max_network_delay_s": 0.25
+}

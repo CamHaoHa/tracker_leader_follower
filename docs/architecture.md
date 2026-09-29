@@ -1,101 +1,214 @@
 # Tracking subsystem architecture
 
-The current scope is ultrasound body tracking and a black-screen dot visualizer.
-The full assignment's gameplay and installer work are deferred.
+Two ESP32 nodes each operate one positional pan servo and one ultrasonic sensor.
+The laptop owns coordination, background calibration, localization, motion
+prediction and rendering. The output is one cyan spot on a black screen.
+Gameplay and installer work are outside this stage.
 
-## Layout and coordinates
+## Components
 
-Each ESP32 controls one positional servo carrying one ultrasonic sensor. The
-PC coordinates measurements and performs localization. Coordinates are metres:
-`x` increases from the left edge (0) to the right edge (1.5), `y` increases away
-from the screen wall. Both acoustic centres have the same measured `y`, default
-0.20 m, and default `x` coordinates 0 and 1.5 m. The tracking rectangle is
-`x=0..1.5`, `y=0.60..2.00`. The screen maps near depth to top and far depth to
-bottom. All hardware must remain within 0.50 m of the wall.
+| Component | Responsibility |
+| --- | --- |
+| `firmware/src/main.cpp` | Wi-Fi profiles, calibrated servo commands, bounded echo acquisition, WM2 protocol |
+| `whack/protocol.py` | Strict, versioned ASCII packet formats |
+| `whack/transport.py` | Nonblocking UDP discovery and a timed point-reflector simulator |
+| `whack/controller.py` | Concurrent aiming, exclusive ping turns, calibration and tracking states |
+| `whack/tracking.py` | Circle intersection, motion filtering, timestamp alignment and bounded prediction |
+| `whack/ui.py` | One measured/predicted position spot and optional diagnostics |
+| `whack/__main__.py` | Window/headless launch, start mode and CSV recording |
 
-Two ranges to a common reflecting target define two circle intersections. The
-PC selects the forward intersection. Both echoes must belong to the same
-person; walls, arms, clothing and different torso surfaces violate this model.
-Servo aim is not a measured target bearing. Bearing gates, background rejection,
-range-pair timing and a speed gate reject some errors, but cannot prove target
-identity. See `docs/requirements.md` for physical validation.
+## Coordinates and measurement model
 
-The servo command is the angle counter-clockwise from +x: 90 degrees faces away
-from the wall. Firmware maps this to pulse width using each mount's reversal,
-centre trim and travel limits. Position is open-loop; there is no servo encoder.
+Coordinates are metres. `x` increases from the field's left edge and `y`
+increases away from the wall. Default acoustic centres are `(0, 0.20)` and
+`(1.50, 0.20)`; both share the same measured depth and torso height. The visible
+rectangle is `x=0..1.50`, `y=0.60..2.00`. The screen maps the near edge to the top
+and far edge to the bottom. Measure the actual geometry before calibration.
 
-## Acquisition, calibration and filtering
+Two corrected ranges to a common point define two circle intersections. The
+laptop chooses the forward one. Servo bearings gate the possible result but are
+not exact echo angles. Body surfaces, clothing and furniture can violate the
+common-point assumption. No body-width correction or human identification is
+implemented; the reconstructed position is an approximate foreground target.
 
-An empty-area profile samples 20 candidate positions, three pairs per position.
-The sweep includes both near corners, the far region and a row in the warning
-zone. Calibration has a three-second lead-in. The median of successful echoes
-is stored for each bearing; fewer than two successes records no background echo.
-An invalid servo response or a lost packet fails calibration. A missing echo
-alone cannot distinguish clear space from a disconnected sensor, so validate
-sensors against a board first.
+Servo bearings are counter-clockwise from +x: 0° right, 90° forward, 180° left.
+Firmware applies reversal, centre trim and calibrated pulse mapping. A reported
+bearing is the commanded estimate; there is no servo angle encoder.
 
-During tracking, each commanded angle snaps to a bearing in that node's profile.
-A foreground echo must be at least 0.15 m closer than the stored room background,
-or the profile must have no return there. Unprofiled angles cannot bypass the
-filter. Simulation uses an ideal single reflector and does not require a profile.
+## Calibration and acquisition
 
-Accepted ranges must be within 250 ms of each other by default. A long second
-servo movement causes a repeat at the same aim point after settling. The
-scheduler then resumes normal acquisition. Circle geometry, beam consistency,
-speed and range checks precede a time-based display filter. The raw estimate
-controls the warning so display smoothing cannot postpone it. Warning release
-requires 3 cm beyond the near boundary. Calibration geometry changes invalidate
-old profiles.
+Hardware needs a version-2 empty-field background profile matching its geometry.
+A three-second lead-in precedes a dense independent bearing sweep. The angular
+grid also includes all bearings required by the search plan; each sweep entry
+gets three left/right pairs. Typical ranges are stored by node and bearing.
+Fewer than two valid echoes stores no return; `INVALID` responses, packet loss or
+other acquisition failures abort calibration. A no-return result does not
+establish sensor health.
 
-## Scheduling and wire protocol
+Following may use exact calibrated bearings or directions between closely
+spaced calibrated samples. At an intermediate direction the nearer available
+background range is used conservatively; large uncalibrated gaps are rejected.
+A range must be more than 0.15 m closer than a recorded background to qualify as
+foreground. Simulation has an ideal target and does not require a room profile.
 
-PC binds UDP 4210. Nodes bind UDP 4211 and broadcast discovery every 2 seconds.
-All devices join the same local Wi-Fi network. Only one command is outstanding:
-node 0, then node 1, with at least 65ms after a response before the next command.
-Node servo settling is bounded to 700 ms and echo waiting to 25 ms. A command times
-out after 1 s, followed by a 100 ms guard; late replies are ignored. No node pings
-without a request. Tracking-loss sweeps trade reacquisition speed for coverage.
+Search points cover paired beams over rectangular cells with an angular margin.
+This covers the configured beam model, not physical human echo gaps. The dense
+calibration grid and search-point list serve different purposes and may have
+different sizes. Their sizes depend on measured geometry and beam assumptions.
 
-Strict ASCII datagrams:
+State flow:
 
+```text
+CALIBRATION → FIND → CONFIRM → TRACK
+                         ↑       ↓
+                         └─ LOCAL SEARCH
+                                 ↓
+                                LOST → FIND
 ```
-WM1 HELLO <node>
-WM1 MEASURE <seq> <angle_mdeg>
-WM1 RANGE <node> <seq> <actual_angle_mdeg> <distance_mm> <status>
+
+`--start-mode center` initially holds the centre, then allows a wider search if
+acquisition has not succeeded. `--start-mode search` searches immediately. Both
+require two consistent foreground pairs before displaying the target. Space/R
+restarts acquisition; C rebuilds the empty-field profile.
+
+## Position and motion filter
+
+The tracker rejects invalid ranges, unstable intersections, incompatible beam
+angles, excessive pair skew and implausible jumps. An alpha-beta filter maintains
+position and velocity. Once a recent motion estimate exists, each earlier range
+is adjusted by its predicted radial movement to align the staggered measurements
+to the newer observation time. This is a first-order constant-velocity model;
+sudden changes and different reflecting body surfaces remain limitations.
+
+Aiming projects the estimated target forward by the configured lead interval.
+Both motors can move concurrently. Commands that retain an already-settled
+bearing incur no new movement delay. There is no closed-loop servo feedback.
+
+On a brief miss, local search tries directions around the recent prediction.
+The default local-search budget is 0.50 s from the last accepted observation.
+After that, tracking is lost and wider acquisition resumes. A single range is
+never accepted as a complete 2D fix.
+
+The default displayed prediction expires after 0.20 s. Prediction does not update
+the last accepted measurement timestamp. These limits are software parameters,
+not measured physical response times. Confidence combines consistency and age;
+it is not a calibrated probability of position accuracy.
+
+## WM2 scheduling and firing permissions
+
+The laptop binds UDP 4210 and nodes UDP 4211. Both nodes receive an AIM for the
+same frame sequence, each with its own bearing. The laptop waits for both READY
+responses, then grants one FIRE at a time. Servo settling is bounded to 700 ms
+and echo waiting to 25 ms. An unchanged settled servo has no extra settling wait.
+
+Successful RANGE receipt proves that firing has finished. The host then waits
+at least 65 ms before authorizing the next sensor. Each node also enforces its
+local minimum spacing. These settings are conservative engineering controls;
+physical crosstalk still needs testing in the actual room.
+
+READY provides a firing lease lasting at most 1000 ms from readiness. FIRE
+consumes that lease immediately; it is never queued for later execution. Cached
+results allow retransmission without emitting another ping. If FIRE may have
+been delivered but its response is missing, the laptop retains an acoustic guard
+through the latest possible lease expiry plus echo and quiet time. Starting a
+new calibration or acquisition does not cancel this uncertainty guard.
+
+The normal host waits at most 0.95 s for readiness and 0.25 s for a firing reply.
+Timeout recovery can be longer because the acoustic guard remains in effect.
+No per-frame rate or network delivery guarantee follows from these timeout values.
+
+### Strict ASCII protocol
+
+```text
+WM2 DISCOVER
+WM2 HELLO <node>
+WM2 AIM <seq> <angle_mdeg>
+WM2 READY <node> <seq> <angle_mdeg> <lease_ms> <status>
+WM2 FIRE <seq>
+WM2 RANGE <node> <seq> <angle_mdeg> <distance_mm> <status> <sample_ms> <age_us>
 ```
 
-- `node`: 0 or 1; `seq`: 1..4294967295, seeded from host time and incremented.
-- `angle_mdeg`: 0..180000; 90,000 means forward.
-- `distance_mm`: 20..4000 for the firmware; 0 on errors.
-- `status`: OK, TIMEOUT or INVALID.
+- Nodes use IDs 0 and 1. Sequences are nonzero uint32 values with wrap-aware order.
+- Angles are 0..180000 millidegrees; 90000 means forward.
+- READY status is `OK` with a remaining lease, or `INVALID` with no lease.
+- RANGE status is `OK`, `TIMEOUT` or `INVALID`. Firmware accepts 20..4000 mm;
+  error responses have zero distance and are not position fixes.
+- `sample_ms` is the node's local clock at the trigger. `age_us` describes elapsed
+  acquisition time before completing the result; cached results retain their
+  original measurement metadata.
 
-Replies must match the pending node, sequence and source address. Successful
-replies must also match the requested angle; an INVALID response may report the
-unchanged bearing if travel limits reject movement. Angles describe calibrated
-commands, not independently observed servo positions. Cached command sequences
-never re-ping. Nodes release host ownership after 30 seconds of inactivity.
+Replies must match the pending sequence, node and source endpoint. Successful
+responses must match the commanded bearing. The host bounds acquisition time
+between its FIRE send time and RANGE receive time minus the reported acquisition
+age, then uses the interval midpoint as its timestamp estimate. Excessively
+wide or inconsistent timing is rejected. Independent node clocks are not treated
+as synchronized, and raw `sample_ms` values are not compared across boards.
 
-Discovered nodes expire after 6 seconds without evidence of life. Duplicate IDs
-suspend that node. Explicitly configured IP addresses remain usable across
-outages. Only one PC should coordinate the nodes. There is no protocol
-authentication; use a dedicated trusted local network.
+WM1 MEASURE remains available to legacy diagnostic tools, but the new controller
+requires WM2 capability from both nodes. A node advertising WM1 is shown as
+requiring the new firmware rather than being given a WM2 firing schedule.
 
-## Failure behaviour and limits
+### Discovery and node freshness
 
-The dot disappears immediately after an invalid pair, or after 1 second without
-a new accepted fix. Missing sensors, impossible intersections and out-of-bounds
-positions are shown in diagnostics. A detected near-wall position activates a
-visual warning and throttled system bell. Behind the sensor baseline, the
-forward-intersection model has no coverage. Loss of an echo must be shown as
-loss of tracking, not inferred to be a safe person position.
+Nodes broadcast HELLO every two seconds. For explicitly supplied IP addresses,
+the host can also send unicast `WM2 DISCOVER`; its HELLO reply confirms node ID
+and protocol version without moving the servo, taking ownership or changing a
+firing lease. Discovery replies go to the requester's source port.
 
-Firmware runs independently on each ESP32, while the PC owns global sequencing.
-Simulations validate timing and message handling; only actual body tests establish
-accuracy, usable speed, acquisition delay, interference and battery runtime.
+Node/protocol freshness expires after six seconds without the expected evidence
+of life. Configured IPs retain their endpoint mapping across outages, but do not
+bypass the requirement for fresh compatible firmware identification. Duplicate
+node IDs suspend the conflicting node. Only one laptop should coordinate both
+units. Firmware releases control ownership after 30 seconds of inactivity, and
+Wi-Fi loss revokes pending transactions and firing permissions.
+
+## Rendering and logs
+
+The canvas contains one cyan position spot. Fresh measured estimates are solid;
+short extrapolation is dim and hollow. Missing, lost or out-of-field positions
+are hidden. A 2 mm boundary tolerance accommodates millimetre range quantization;
+accepted near-edge points are clamped only for rendering onto the canvas edge.
+Invalid observations are never clamped into valid tracking fixes.
+
+The UI requests a redraw every 16 ms, independently of new sensor readings.
+Optional diagnostics distinguish display FPS from accepted position updates,
+and show fix age, confidence and state. CSV and headless output include those
+fields and a prediction flag. There are no gameplay events or warning bells.
+
+## Network profiles and validation boundary
+
+Local firmware configuration retains home and school credentials. Profile 0 is
+home, profile 1 is a school local network/hotspot, and profile 2 is optional
+OneNet PEAP on a compatible Arduino core. Profile 3 creates a local **TrackerNet**
+network on the left ESP32, which runs as a WPA2 access point at `192.168.4.1/24`.
+The right ESP32 and laptop join as Wi-Fi clients and receive DHCP addresses. The
+right node's IP is not assumed to be `.2`; WM2 discovery identifies it, or the
+user supplies the actual address from Serial Monitor.
+
+`python3 -m tools.prepare_tracker_firmware --network tracker` prepares both
+Arduino sketches with one shared random private password in their generated
+`tracker_network.h` files. This override selects profile 3 while preserving the
+existing home/school settings. A regular generator run preserves the selection;
+`--network configured` removes the override and restores the profile selected by
+each existing `tracker_config.h`. The user manually uploads both matching
+sketches after a change. Generation and the desktop controller never flash or
+connect to hardware automatically.
+
+With profile 3, boot the left board first and join **TrackerNet** on the laptop
+using the password shown in Arduino IDE's `tracker_network.h` tab. The laptop
+must remain connected when it reports no internet. The same desktop command,
+UDP protocol, servo coordination and tracking workflow are used on all profiles;
+TrackerNet adds no internet dependency. Its physical connection reliability
+remains to be verified.
+
+Synthetic tests exercise packet handling, timing, ideal movement and loss.
+Physical tests are still needed for accurate body positioning, usable speed,
+servo settling, crosstalk, radio behavior and visible latency. OneNet authentication
+and tracker UDP access remain a deferred network test. See the
+[workflow](player-tracking-workflow.md) and [live setup](live-tracker-setup.md).
 
 ## Study reference
 
-`example-code/tracker.py` separates acquisition, filtering and rendering on a
-different board/UART configuration. Its black-background position display is the
-visual reference. The new tracker uses its own UDP protocol and circle geometry;
-the vendored files remain unchanged.
+`example-code/tracker.py` supplies the black-background visual reference for a
+different board/UART setup. This tracker has its own UDP protocol and geometry.
+The vendored files retain their original implementation and license.
