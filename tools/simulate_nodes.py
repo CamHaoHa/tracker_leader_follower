@@ -22,6 +22,8 @@ NODE_PORT = 4211
 MAX_SEQUENCE = 0xFFFFFFFF
 AIM_COMMAND = re.compile(rb"WM2 AIM ([0-9]{1,10}) ([0-9]{1,6})\r?\n?")
 FIRE_COMMAND = re.compile(rb"WM2 FIRE ([0-9]{1,10})\r?\n?")
+BUZZ_COMMAND = re.compile(rb"WM2 BUZZ ([0-9]{1,10})\r?\n?")
+MAX_BUZZ_MS = 2000
 
 
 def parse_command(packet):
@@ -40,6 +42,9 @@ def parse_command(packet):
         seq = int(match[1])
         if 1 <= seq <= MAX_SEQUENCE:
             return "FIRE", seq, None
+    match = BUZZ_COMMAND.fullmatch(packet)
+    if match and int(match[1]) <= MAX_BUZZ_MS:
+        return "BUZZ", None, int(match[1])     # third field: duration in ms
     return None
 
 
@@ -162,6 +167,8 @@ class Simulator:
                 continue
             if address[1] != HOST[1]:
                 continue
+            if kind == "BUZZ":
+                continue  # These models have no buzzer: accepted, no reply, no state change.
             if now - node.last_command >= 30:
                 node.latest_sequence, node.aim = None, None
                 node.cache.clear()

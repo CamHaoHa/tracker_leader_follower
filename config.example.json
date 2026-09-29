@@ -20,5 +20,6 @@
   "servo_travel_deg": [
     0,
     180
-  ]
+  ],
+  "buzzer_node": 1
 }
