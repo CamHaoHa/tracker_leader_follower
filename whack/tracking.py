@@ -80,6 +80,10 @@ class Geometry:
     # Per-node sweep bounds in degrees, (low, high), ordered like the sensors.
     # Empty tuple = defaults: outer boxes cover their side, middle boxes wide.
     sweep_bounds_deg: tuple = ()
+    # Physical servo travel in world degrees, (low, high), same for every box.
+    # Aims are clamped into it (the firmware refuses anything outside), and
+    # the default sweep arcs are clipped to it. The bench SG90s use (30, 150).
+    servo_travel_deg: tuple = (0.0, 180.0)
     sweep_step_deg: float = 5.0
     # Echoes beyond this are never used to lock; inside the field they are hints.
     reliable_range_m: float = 1.7
@@ -118,10 +122,14 @@ class Geometry:
             raise ValueError("Extra sensors must lie strictly between left_x and right_x")
         if len(set(xs)) != len(xs):
             raise ValueError("Extra sensor positions must be distinct")
+        travel = tuple(self.servo_travel_deg)
+        if len(travel) != 2 or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in travel) \
+                or not 0 <= travel[0] < travel[1] <= 180:
+            raise ValueError("servo_travel_deg must be (low, high) within 0..180")
         bounds = tuple(tuple(b) for b in self.sweep_bounds_deg)
         if bounds and (len(bounds) != self.sensor_count or any(
-                len(b) != 2 or not 0 <= b[0] < b[1] <= 180 for b in bounds)):
-            raise ValueError("sweep_bounds_deg needs one (low, high) pair per sensor within 0..180")
+                len(b) != 2 or not travel[0] <= b[0] < b[1] <= travel[1] for b in bounds)):
+            raise ValueError("sweep_bounds_deg needs one (low, high) pair per sensor within servo_travel_deg")
         if not (1 <= self.sweep_step_deg <= 30 and 0.3 <= self.reliable_range_m <= 4
                 and 0.02 <= self.min_player_range_m <= 0.5 and 0 <= self.background_margin_m <= 1
                 and 0 <= self.jitter_deg <= 45 and 0 <= self.jitter_s <= 5
@@ -147,10 +155,13 @@ class Geometry:
             return float(lo), float(hi)
         n = self.sensor_count
         if node == 0:
-            return 10.0, 100.0
-        if node == n - 1:
-            return 80.0, 170.0
-        return 30.0, 120.0
+            lo, hi = 10.0, 100.0
+        elif node == n - 1:
+            lo, hi = 80.0, 170.0
+        else:
+            lo, hi = 30.0, 120.0
+        t_lo, t_hi = self.servo_travel_deg
+        return max(lo, float(t_lo)), min(hi, float(t_hi))
 
     def angle(self, node: int, point: tuple[float, float]) -> int:
         """Point one sensor toward a field position using atan2(dy, dx).
@@ -287,7 +298,7 @@ def load_geometry(path: str | None) -> Geometry:
     if not path:
         return Geometry()
     data = json.loads(Path(path).read_text())
-    for key in ("extra_sensor_x", "sweep_bounds_deg"):
+    for key in ("extra_sensor_x", "sweep_bounds_deg", "servo_travel_deg"):
         if key in data:
             data[key] = tuple(tuple(v) if isinstance(v, list) else v for v in data[key])
     return Geometry(**data)

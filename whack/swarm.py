@@ -343,7 +343,10 @@ class SwarmController:
         return max(lo, min(hi, b))
 
     def _clamp_travel(self, node, bearing):
-        return max(0, min(180000, bearing))
+        # The firmware answers READY INVALID for a bearing outside its travel
+        # and the box then pings nothing. Aim as close as the servo can get.
+        lo, hi = self.geometry.servo_travel_deg
+        return max(round(lo*1000), min(round(hi*1000), bearing))
 
     def _choose_bearing(self, box, now):
         g = self.geometry
