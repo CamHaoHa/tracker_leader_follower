@@ -21,6 +21,7 @@ The user's hardware is a Freenove ESP32-WROOM-32E board and HC-SR04 sensor per u
 | Servo ground | ESP32 ground and external supply ground |
 | Servo power | Separate regulated supply rated for the servo voltage and stall current |
 | HC-SR04 supply | ESP32 3V3 |
+| Buzzer, **middle box only** | Buzzer + to GPIO25, buzzer − to ESP32 ground |
 
 Keep a common ground within each unit. Do not power a servo from ESP32 3V3 or GPIO pins. A suitable external servo supply avoids regulator overload and Wi-Fi brownouts. During USB programming, avoid connecting another source to the board's 5 V input unless the exact board supports that arrangement; the separately powered servo still needs a shared ground.
 
@@ -188,6 +189,31 @@ The laptop requires a fresh compatible node identity; protocol freshness expires
 after six seconds. Knowing a configured IP does not establish that the board is
 online or still running WM2 firmware.
 
+### Buzzer
+
+A box built with `BUZZER_PIN` sounds its buzzer on request. Only the middle box
+(node 1) has one, on GPIO25; `BUZZER_PIN` defaults to `-1`, no buzzer.
+
+```text
+WM2 BUZZ 400
+```
+
+The single field is a duration of 0..2000 ms. The buzzer sounds until that long
+after receipt. Every new BUZZ replaces the deadline, and `WM2 BUZZ 0` silences
+at once. The board silences itself when the deadline passes: the laptop repeats
+the command while the sound should continue, so a laptop that stops or leaves
+the network cannot leave the buzzer on for more than 2 s.
+
+BUZZ must come from the laptop's UDP 4210. It has no sequence number and no
+reply. Like DISCOVER it claims no control ownership and leaves aims, firing
+leases and ping spacing alone. A box without a buzzer ignores it.
+
+`BUZZER_TONE_HZ` (default 2000) is the square wave for a passive buzzer: LEDC
+channel 2, 10-bit, 50 % duty while sounding and duty 0 when silent. The servo
+keeps channel 0 and its own 50 Hz timer. Set `BUZZER_TONE_HZ 0` for an active
+buzzer; the pin is then held HIGH while sounding. With `#if NODE_ID == 1` the
+`node_right_pair` build (node 1 of a two-box layout) drives GPIO25 as well.
+
 ### Aim both, fire one at a time
 
 The laptop sends an AIM to each node, using one frame sequence and the bearing
@@ -276,8 +302,9 @@ g++ -std=c++11 -Wall -Wextra -Werror -Ifirmware/include firmware/test/protocol_t
 /tmp/whack-firmware-protocol-test
 ```
 
-Native tests cover malformed/overflowed inputs, discovery, sequence wraparound,
-lease consumption/expiry, reversed mounting, trim and travel-limit rejection.
+Native tests cover malformed/overflowed inputs, discovery, buzzer durations and
+the buzzer deadline, sequence wraparound, lease consumption/expiry, reversed
+mounting, trim and travel-limit rejection.
 Python simulation and loopback tests cover coordination and synthetic tracking.
 These checks do not exercise actual servo motion, radio transport or human
 ultrasonic reflections. No measured tracking rate or latency is claimed.

@@ -77,7 +77,20 @@ def tracker_network_header(settings: dict) -> str:
                                    ("TRACKER_WIFI_CHANNEL", settings["channel"])))
 
 
+BUZZER_SETTINGS = '''
+// Buzzer, middle box only: + to GPIO25, - to GND. The laptop sounds it with
+// WM2 BUZZ. 2000 Hz square wave for a passive buzzer; set BUZZER_TONE_HZ to 0
+// for an active buzzer, which only needs the pin held HIGH.
+#define BUZZER_PIN 25
+#define BUZZER_TONE_HZ 2000
+'''
+NO_BUZZER = '''
+// No buzzer on this box: only the middle box carries one, on GPIO25.
+'''
+
+
 def config_template(side: str, node_id: int) -> str:
+    buzzer = BUZZER_SETTINGS if side == "middle" else NO_BUZZER
     return f'''#pragma once
 
 // Settings for the {side.upper()} ESP32 only. Keep this file private.
@@ -108,7 +121,7 @@ def config_template(side: str, node_id: int) -> str:
 #define SERVO_PIN 33
 #define ULTRASONIC_TRIG_PIN 32
 #define ULTRASONIC_ECHO_PIN 34
-
+{buzzer}
 // World bearings: 0 = right, 90 = into the field, 180 = left.
 // Check your servo's mounting and specifications before scanning.
 // Uploading/restarting centers the servo at a requested bearing of 90 degrees.

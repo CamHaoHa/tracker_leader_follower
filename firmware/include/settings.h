@@ -80,6 +80,16 @@
 #ifndef ULTRASONIC_ECHO_PIN
 #define ULTRASONIC_ECHO_PIN 34
 #endif
+// Optional buzzer, sounded by the laptop with WM2 BUZZ. -1 = this box has none
+// and ignores the command. Only the middle box (node 1) carries one, on GPIO25.
+#ifndef BUZZER_PIN
+#define BUZZER_PIN -1
+#endif
+// Square-wave frequency for a passive buzzer. 0 = hold the pin steadily HIGH
+// while sounding, for an active buzzer that has its own oscillator.
+#ifndef BUZZER_TONE_HZ
+#define BUZZER_TONE_HZ 2000
+#endif
 #ifndef SERVO_SETTLE_MIN_MS
 #define SERVO_SETTLE_MIN_MS 60
 #endif
@@ -121,3 +131,10 @@ static_assert(ULTRASONIC_MIN_GAP_MS >= 65, "Leave at least 65 ms between pings")
 static_assert(SERVO_PIN != ULTRASONIC_TRIG_PIN && SERVO_PIN != ULTRASONIC_ECHO_PIN &&
                   ULTRASONIC_TRIG_PIN != ULTRASONIC_ECHO_PIN,
               "Servo, trigger and echo must use distinct pins");
+static_assert(BUZZER_PIN == -1 || (BUZZER_PIN >= 0 && BUZZER_PIN <= 33),
+              "BUZZER_PIN must be -1 (no buzzer) or an output pin; GPIO34..39 are input-only");
+static_assert(BUZZER_PIN < 0 || (BUZZER_PIN != SERVO_PIN && BUZZER_PIN != ULTRASONIC_TRIG_PIN &&
+                                 BUZZER_PIN != ULTRASONIC_ECHO_PIN),
+              "The buzzer must not share a pin with the servo, trigger or echo");
+static_assert(BUZZER_TONE_HZ == 0 || (BUZZER_TONE_HZ >= 100 && BUZZER_TONE_HZ <= 10000),
+              "BUZZER_TONE_HZ must be 0 (steady HIGH, active buzzer) or 100..10000");

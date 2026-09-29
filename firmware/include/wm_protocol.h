@@ -6,12 +6,17 @@
 
 namespace wm {
 
-enum class CommandKind { Measure, Aim, Fire, Discover };
+enum class CommandKind { Measure, Aim, Fire, Discover, Buzz };
+
+// The longest sound one BUZZ may ask for. The laptop repeats BUZZ while the
+// sound should continue, so a laptop that disappears is silenced within this.
+constexpr uint32_t kMaxBuzzMs = 2000;
 
 struct Command {
   uint32_t sequence;
   uint32_t bearing_mdeg;
   CommandKind kind = CommandKind::Measure;
+  uint32_t duration_ms = 0;  // BUZZ only: 0 silences at once.
 };
 
 // Length-delimited parsing rejects embedded NULs, signs, floats, overflow,
@@ -44,11 +49,21 @@ inline bool parse(const char* data, size_t length, Command& out) {
   } else if (length >= 12 && memcmp(data, "WM2 DISCOVER", 12) == 0) {
     pos = 12;
     command.kind = CommandKind::Discover;
+  } else if (length >= 9 && memcmp(data, "WM2 BUZZ ", 9) == 0) {
+    pos = 9;
+    command.kind = CommandKind::Buzz;
   } else {
     return false;
   }
-  if (command.kind != CommandKind::Discover &&
-      (!decimal(data, length, pos, command.sequence) || command.sequence == 0)) return false;
+  if (command.kind == CommandKind::Buzz) {
+    // BUZZ carries a duration and no sequence: it is not part of any AIM/FIRE
+    // transaction, and repeating it only moves the silence deadline.
+    if (!decimal(data, length, pos, command.duration_ms) || command.duration_ms > kMaxBuzzMs)
+      return false;
+  } else if (command.kind != CommandKind::Discover &&
+             (!decimal(data, length, pos, command.sequence) || command.sequence == 0)) {
+    return false;
+  }
   if (command.kind == CommandKind::Measure || command.kind == CommandKind::Aim) {
     if (pos >= length || data[pos++] != ' ') return false;
     if (!decimal(data, length, pos, command.bearing_mdeg) || command.bearing_mdeg > 180000)
@@ -91,6 +106,29 @@ struct FireLease {
     return allowed;
   }
   void revoke() { consumed = true; }
+};
+
+// The buzzer sounds until a deadline. Every BUZZ replaces that deadline, and a
+// duration of 0 silences at once. The board silences itself when the deadline
+// passes, so lost packets or a vanished laptop cannot leave it sounding.
+// Arithmetic stays valid across millis() wrap (durations are at most 2000 ms).
+struct BuzzTimer {
+  uint32_t deadline = 0;
+  bool sounding = false;
+
+  // Returns whether the output must be on after this command.
+  bool command(uint32_t now, uint32_t duration_ms) {
+    if (duration_ms > kMaxBuzzMs) duration_ms = kMaxBuzzMs;
+    sounding = duration_ms != 0;
+    deadline = now + duration_ms;
+    return sounding;
+  }
+  // Returns true exactly once, when the deadline has passed: silence the output.
+  bool expired(uint32_t now) {
+    if (!sounding || static_cast<int32_t>(now - deadline) < 0) return false;
+    sounding = false;
+    return true;
+  }
 };
 
 inline bool servo_position(uint32_t bearing_mdeg, bool reverse, int32_t trim_mdeg,
