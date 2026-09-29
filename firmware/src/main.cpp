@@ -697,7 +697,7 @@ void setup() {
   Serial.printf("Tracker node %u, Arduino %u.%u.%u, Wi-Fi profile %u\n", NODE_ID,
                 ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH,
                 WIFI_PROFILE);
-  Serial.printf("Pins: servo=%u, TRIG=%u, ECHO=%u (ECHO requires a voltage divider)\n",
+  Serial.printf("Pins: servo=%u, TRIG=%u, ECHO=%u (sensor on 3V3, ECHO wired directly)\n",
                 static_cast<unsigned>(SERVO_PIN), static_cast<unsigned>(ULTRASONIC_TRIG_PIN),
                 static_cast<unsigned>(ULTRASONIC_ECHO_PIN));
   if (selected_ssid()[0] == '\0')

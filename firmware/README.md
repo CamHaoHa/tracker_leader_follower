@@ -14,19 +14,21 @@ The user's hardware is a Freenove ESP32-WROOM-32E board and HC-SR04 sensor per u
 
 | Signal | ESP32 connection |
 | --- | --- |
-| Servo control | GPIO25 |
+| Servo control | GPIO33 |
 | Ultrasonic TRIG | GPIO32 |
-| Ultrasonic ECHO | GPIO35, **through a 5 V to 3.3 V level shifter/divider** |
+| Ultrasonic ECHO | GPIO34, **wired directly** (sensor powered from 3V3) |
 | Ultrasonic ground | ESP32 ground |
 | Servo ground | ESP32 ground and external supply ground |
 | Servo power | Separate regulated supply rated for the servo voltage and stall current |
-| HC-SR04 supply | Regulated 5 V, according to the sensor's specification |
+| HC-SR04 supply | ESP32 3V3 |
 
 Keep a common ground within each unit. Do not power a servo from ESP32 3V3 or GPIO pins. A suitable external servo supply avoids regulator overload and Wi-Fi brownouts. During USB programming, avoid connecting another source to the board's 5 V input unless the exact board supports that arrangement; the separately powered servo still needs a shared ground.
 
-Treat ECHO as 5 V unless your exact sensor explicitly provides a 3.3 V-safe output. For a nominal 5 V ECHO, a divider can use **2.2 kΩ from ECHO to GPIO35 and 3.3 kΩ from GPIO35 to ground**, producing approximately 3.0 V. Confirm its output against your sensor and supply voltage. The ESP32 uses 3.3 V logic; see [Espressif's electrical specifications](https://documentation.espressif.com/esp32_datasheet_en.pdf). If the sensor does not accept a 3.3 V TRIG input, add a suitable level shifter in that direction too.
+The sensor is powered from the ESP32's 3V3 pin, so its ECHO output is a 3.3 V signal and goes to GPIO34 directly: there is no divider. **Do not move the sensor supply to 5 V while ECHO is wired directly.** A 5 V ECHO needs a divider or level shifter again, for example 2.2 kΩ from ECHO to the GPIO and 3.3 kΩ from the GPIO to ground (approximately 3.0 V). The ESP32 uses 3.3 V logic; see [Espressif's electrical specifications](https://documentation.espressif.com/esp32_datasheet_en.pdf). The classic HC-SR04 is specified for 5 V and only the 3–5.5 V revisions range reliably on 3V3, so check every sensor with `arduino/bench_test` before mounting it.
 
-On classic ESP32 boards, GPIO32 supports the trigger output and GPIO35 is input-only, suitable for ECHO. GPIO25/32/35 have no boot strapping restriction in [Espressif's GPIO table](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html). Check the silkscreen's **GPIO numbers**, not header positions.
+On classic ESP32 boards, GPIO32 and GPIO33 support output (trigger and servo signal). GPIO34 is input-only and has no internal pull-up or pull-down resistor, which suits ECHO: the sensor drives that line both ways. GPIO32/33/34 have no boot strapping restriction in [Espressif's GPIO table](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html). Check the silkscreen's **GPIO numbers**, not header positions.
+
+These are the firmware defaults (`include/settings.h`). A local `config.local.h` or a generated `tracker_config.h` overrides them and is never rewritten by the tools: a file written for the old map (servo GPIO25, ECHO GPIO35) must have its three pin lines changed by hand.
 
 ## Configure and flash
 

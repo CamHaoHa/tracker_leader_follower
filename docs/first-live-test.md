@@ -71,8 +71,9 @@ Measure from the wall and each sensor's acoustic centre:
 
 The field is **1.90–2.80 m forward of the sensors**. Mount both at the same torso
 height with horizontal beams. Keep brackets clear and place spectators outside
-the beams. Each unit needs its existing ECHO divider, suitable servo power and
-shared ground. The dedicated file is [config.test-field.json](../config.test-field.json).
+the beams. Each unit needs its sensor powered from 3V3 with ECHO wired directly
+to GPIO34 (servo signal GPIO33, TRIG GPIO32), suitable servo power and shared
+ground. The dedicated file is [config.test-field.json](../config.test-field.json).
 
 This arrangement's planned sweep stays approximately within 32–148° under its
 configured geometry. Verify the physical angles first; software coverage is not

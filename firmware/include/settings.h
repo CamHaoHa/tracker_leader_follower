@@ -68,14 +68,17 @@
 #ifndef SERVO_MAX_MDEG
 #define SERVO_MAX_MDEG 180000
 #endif
+// One pin map for every box: servo signal GPIO33, TRIG GPIO32, ECHO GPIO34.
+// GPIO34 is input-only and has no internal pull resistors. The sensor is
+// powered from 3V3, so ECHO is a 3.3 V signal wired directly (no divider).
 #ifndef SERVO_PIN
-#define SERVO_PIN 25
+#define SERVO_PIN 33
 #endif
 #ifndef ULTRASONIC_TRIG_PIN
 #define ULTRASONIC_TRIG_PIN 32
 #endif
 #ifndef ULTRASONIC_ECHO_PIN
-#define ULTRASONIC_ECHO_PIN 35
+#define ULTRASONIC_ECHO_PIN 34
 #endif
 #ifndef SERVO_SETTLE_MIN_MS
 #define SERVO_SETTLE_MIN_MS 60

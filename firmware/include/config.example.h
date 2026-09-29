@@ -48,9 +48,11 @@
 #define SERVO_MIN_MDEG 0
 #define SERVO_MAX_MDEG 180000
 
-#define SERVO_PIN 25
+// Same pin map on every box. GPIO34 is input-only with no internal pull
+// resistors; power the sensor from 3V3 and wire ECHO directly (no divider).
+#define SERVO_PIN 33
 #define ULTRASONIC_TRIG_PIN 32
-#define ULTRASONIC_ECHO_PIN 35
+#define ULTRASONIC_ECHO_PIN 34
 #define SERVO_SETTLE_MIN_MS 60
 #define SERVO_SETTLE_MS_PER_DEG 3
 #define SERVO_SETTLE_MAX_MS 700

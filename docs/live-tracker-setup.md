@@ -91,11 +91,14 @@ numbers:
 
 | Signal | ESP32 GPIO |
 | --- | --- |
-| Servo signal | 25 |
+| Servo signal | 33 |
 | HC-SR04 TRIG | 32 |
-| HC-SR04 ECHO through voltage divider | 35 |
+| HC-SR04 ECHO, wired directly | 34 |
 
-Keep the ECHO divider and shared grounds from the bench setup. Supply the servo
+Power each HC-SR04 from the ESP32 3V3 pin and wire ECHO straight to GPIO34:
+there is no divider. GPIO34 is input-only and has no internal pull resistors.
+A sensor powered from 5 V must not be wired this way, because its ECHO would
+be a 5 V signal. Keep the shared grounds from the bench setup. Supply the servo
 from its rated external supply. The ESP32 3.3 V pin is not a servo power supply.
 A continuous-rotation servo cannot use this positional control scheme.
 
@@ -130,7 +133,10 @@ The generator copies the maintained firmware into three independent Arduino sket
 folders named by box position: left (node 0), middle (node 1) and right (node 2),
 plus right_pair (node 1) for the right box of a two-box layout, and preconfigures them for the same TrackerNet access point. Re-running
 the generator without a network argument refreshes code while retaining your
-configuration and selected network mode.
+configuration and selected network mode. That also means an existing
+`tracker_config.h` keeps the pins it was created with: if it still says servo 25
+and ECHO 35, change its `SERVO_PIN`, `ULTRASONIC_TRIG_PIN` and
+`ULTRASONIC_ECHO_PIN` lines to 33, 32 and 34 by hand.
 
 1. Open `firmware/arduino/tracker_left/tracker_left.ino` in Arduino IDE.
 2. Check the servo settings in `tracker_config.h`. The `tracker_network.h` tab
