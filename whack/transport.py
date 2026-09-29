@@ -6,7 +6,7 @@ import math
 import re
 import socket
 
-from .protocol import MAX_PACKET, MAX_SEQUENCE, Hello, Range, Ready, parse
+from .protocol import MAX_BUZZ_MS, MAX_PACKET, MAX_SEQUENCE, Hello, Range, Ready, parse
 
 
 class UdpTransport:
@@ -144,6 +144,9 @@ class SimulatedTransport:
         self.pending = []
         self.messages = []
         self.sent, self.aim_times, self.ping_times, self.commands = [], [], [], []
+        # BUZZ is kept apart from the AIM/FIRE records: (time, node, duration_ms).
+        self.buzzes = []
+        self.buzz_until = [float("-inf")] * n
 
     def address(self, node):
         return (f"sim-{node}", 4211)
@@ -153,6 +156,10 @@ class SimulatedTransport:
 
     def seen(self, node, address):
         pass
+
+    def buzzing(self, node):
+        """Whether a box with a buzzer would be sounding now (deadline not passed)."""
+        return self.clock() < self.buzz_until[node]
 
     def _reply(self, node, message):
         self.messages.append((message, self.address(node)))
@@ -192,10 +199,23 @@ class SimulatedTransport:
             node = nodes[address]
             self._reply(node, Hello(node, version=2))
             return
+        buzz_match = re.fullmatch(rb"WM2 BUZZ ([0-9]{1,10})\r?\n?", data)
+        if buzz_match:
+            # As on the ESP32: no reply, and no effect on aims, leases, sequence
+            # order or the session. Each BUZZ replaces the deadline; 0 silences.
+            duration = int(buzz_match[1])
+            if duration > MAX_BUZZ_MS:
+                raise ValueError("Invalid simulator buzz duration")
+            if address not in nodes:
+                raise ValueError("Invalid simulator node")
+            node = nodes[address]
+            self.buzzes.append((now, node, duration))
+            self.buzz_until[node] = now + duration / 1000 if duration else float("-inf")
+            return
         aim_match = re.fullmatch(rb"WM2 AIM ([0-9]{1,10}) ([0-9]{1,6})\r?\n?", data)
         fire_match = re.fullmatch(rb"WM2 FIRE ([0-9]{1,10})\r?\n?", data)
         if len(data) >= 96 or not (aim_match or fire_match):
-            raise ValueError("Simulator requires bounded WM2 AIM/FIRE commands")
+            raise ValueError("Simulator requires bounded WM2 AIM/FIRE/BUZZ commands")
         kind = "AIM" if aim_match else "FIRE"
         seq = int((aim_match or fire_match)[1])
         angle = int(aim_match[2]) if aim_match else None

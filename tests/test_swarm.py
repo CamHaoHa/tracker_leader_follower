@@ -4,6 +4,7 @@ import json
 import math
 import tempfile
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 
 from whack.swarm import SwarmController, fuse, Contribution
@@ -164,6 +165,184 @@ class AlertTests(unittest.TestCase):
         self.assertIn("Two players detected", seen)
 
 
+def poll_while(controller, clock, seconds, condition):
+    """Poll until `condition(snapshot)` holds; fail the caller's assumption otherwise."""
+    for _ in range(round(seconds/.01)):
+        snap = controller.poll(); clock.advance()
+        if condition(snap):
+            return snap
+    raise AssertionError("condition not reached in the simulator")
+
+
+class BuzzerTests(unittest.TestCase):
+    DEAD_ZONE = (0.75, 0.55)
+    IN_FIELD = (0.75, 1.3)
+
+    def alarm(self, target=DEAD_ZONE, text="Player in the dead zone", **geometry):
+        geometry.setdefault("buzzer_node", 1)
+        c, clock, t = make(target=target, **geometry)
+        poll_while(c, clock, 8, lambda snap: snap.alert == text)
+        return c, clock, t
+
+    def test_buzzer_node_must_be_none_or_a_box(self):
+        self.assertEqual(Geometry().buzzer_node, -1)
+        self.assertEqual(Geometry(buzzer_node=1).buzzer_node, 1)
+        self.assertEqual(Geometry(buzzer_node=2, extra_sensor_x=(0.75,)).buzzer_node, 2)
+        for bad in (2, -2, 1.0, True, "1", None):
+            with self.subTest(buzzer_node=bad), self.assertRaises((ValueError, TypeError)):
+                Geometry(buzzer_node=bad)
+
+    def test_buzzer_node_loads_from_json(self):
+        from whack.tracking import load_geometry
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "g.json"
+            path.write_text(json.dumps({"extra_sensor_x": [0.75], "sensor_y": 0.5, "buzzer_node": 1}))
+            self.assertEqual(load_geometry(str(path)).buzzer_node, 1)
+            path.write_text(json.dumps({"buzzer_node": 2}))          # only two boxes
+            with self.assertRaises(ValueError):
+                load_geometry(str(path))
+
+    def test_example_config_names_the_buzzer_box(self):
+        from whack.tracking import load_geometry
+        example = Path(__file__).resolve().parents[1] / "config.example.json"
+        self.assertEqual(load_geometry(str(example)).buzzer_node, 1)
+
+    def test_dead_zone_sounds_the_buzzer_repeatedly_then_silences_it_once(self):
+        c, clock, t = self.alarm()
+        self.assertEqual(t.buzzes, [(t.buzzes[0][0], 1, 400)])     # at once, to the buzzer box
+        for _ in range(200):                                       # two seconds in the dead zone
+            snap = c.poll(); clock.advance()
+            self.assertEqual(snap.alert, "Player in the dead zone")
+            self.assertTrue(t.buzzing(1))                          # never lapses between repeats
+        self.assertTrue(all((n, d) == (1, 400) for _, n, d in t.buzzes), t.buzzes)
+        gaps = [b[0]-a[0] for a, b in zip(t.buzzes, t.buzzes[1:])]
+        self.assertEqual(len(gaps), 10)
+        self.assertTrue(all(abs(gap-.2) < .011 for gap in gaps), gaps)
+
+        t.target = self.IN_FIELD                                   # the player steps back
+        poll_while(c, clock, 6, lambda snap: not snap.alert)
+        self.assertEqual(t.buzzes[-1][1:], (1, 0))
+        self.assertEqual([d for _, _, d in t.buzzes].count(0), 1)
+        self.assertFalse(t.buzzing(1))
+        sent = len(t.buzzes)
+        run(c, clock, 3)                                           # tracking goes on, silently
+        self.assertEqual(len(t.buzzes), sent)
+
+    def test_too_close_to_a_box_sounds_the_buzzer(self):
+        c, clock, t = self.alarm(target=(0.15, 0.7), text="Player too close to box 0")
+        run(c, clock, 1)
+        self.assertGreaterEqual(len(t.buzzes), 5)
+        self.assertTrue(all((n, d) == (1, 400) for _, n, d in t.buzzes), t.buzzes)
+
+    def test_three_boxes_buzz_only_the_middle_one(self):
+        c, clock, t = self.alarm(extra_sensor_x=(0.75,))
+        run(c, clock, 1)
+        self.assertTrue(t.buzzes)
+        self.assertEqual({n for _, n, _ in t.buzzes}, {1})
+
+    def test_no_buzzer_node_sends_nothing(self):
+        for target, text in ((self.DEAD_ZONE, "Player in the dead zone"),
+                             ((0.15, 0.7), "Player too close to box 0")):
+            with self.subTest(alert=text):
+                c, clock, t = self.alarm(target=target, text=text, buzzer_node=-1)
+                run(c, clock, 2)
+                c.pause(); c.close()
+                self.assertEqual(t.buzzes, [])
+
+    def test_other_alerts_do_not_sound_the_buzzer(self):
+        c, clock, t = self.alarm(target=(0.75, 2.2), text="Player outside the field")
+        run(c, clock, 2)
+        self.assertEqual(t.buzzes, [])
+        c, clock, t = make(buzzer_node=1)
+        t.target = lambda now, node: (0.25, 1.2) if node == 0 else (1.3, 1.2)
+        poll_while(c, clock, 10, lambda snap: snap.alert == "Two players detected")
+        run(c, clock, 1)
+        self.assertEqual(t.buzzes, [])
+
+    def test_pause_reset_and_close_silence_once(self):
+        for action in ("pause", "reset", "close", "start_acquisition"):
+            with self.subTest(action=action):
+                c, clock, t = self.alarm()
+                run(c, clock, .5)
+                getattr(c, action)()
+                self.assertEqual(t.buzzes[-1][1:], (1, 0))          # without waiting for a poll
+                self.assertFalse(t.buzzing(1))
+                if action != "close":
+                    t.target = None
+                    run(c, clock, 3)
+                self.assertEqual([d for _, _, d in t.buzzes].count(0), 1)
+                self.assertEqual(t.buzzes[-1][1:], (1, 0))
+
+    def test_paused_controller_stays_silent_while_the_alert_is_shown(self):
+        c, clock, t = self.alarm(target=(0.15, 0.7), text="Player too close to box 0")
+        c.pause()
+        sent = len(t.buzzes)
+        snap = run(c, clock, 1)
+        self.assertEqual(snap.alert, "Player too close to box 0")
+        self.assertEqual(len(t.buzzes), sent)
+
+    def test_calibration_start_silences_the_buzzer(self):
+        clock = Clock()
+        g = Geometry(body_radius_m=0.18, smoothing_tau_s=0.25, local_search_s=1.0, sensor_y=0.5,
+                     buzzer_node=1)
+        t = SimulatedTransport(clock, g); t.target = (0.15, 0.7)
+        with tempfile.TemporaryDirectory() as temp:
+            c = SwarmController(g, clock=clock, transport=t, calibration_path=Path(temp)/"cal.json")
+            c.background = {f"{n}:{b}": None for n in (0, 1) for b in c._grid(n)}   # a loaded map
+            poll_while(c, clock, 8, lambda snap: snap.alert == "Player too close to box 0")
+            run(c, clock, .5)
+            c.start_calibration()
+            self.assertEqual(t.buzzes[-1][1:], (1, 0))
+            run(c, clock, 2)                                       # the stale alert stays silent
+            self.assertTrue(c.calibrating)
+            self.assertEqual([d for _, _, d in t.buzzes].count(0), 1)
+            self.assertEqual(t.buzzes[-1][1:], (1, 0))
+
+    def test_offline_or_old_buzzer_box_gets_nothing(self):
+        for fault in ("offline", "old firmware"):
+            with self.subTest(fault=fault):
+                c, clock, t = make(target=self.DEAD_ZONE, buzzer_node=1, extra_sensor_x=(0.75,))
+                if fault == "offline":
+                    t.address = lambda node: None if node == 1 else (f"sim-{node}", 4211)
+                else:
+                    t.protocol_version = lambda node: 1 if node == 1 else 2
+                poll_while(c, clock, 10, lambda snap: snap.alert == "Player in the dead zone")
+                run(c, clock, 1)
+                self.assertEqual(t.buzzes, [])
+
+    def test_a_failing_send_never_escapes_poll(self):
+        for error in (OSError("network unreachable"), ValueError("bad packet")):
+            with self.subTest(error=type(error).__name__):
+                c, clock, t = make(target=self.DEAD_ZONE, buzzer_node=1)
+                send, refused = t.send, []
+
+                def failing(data, address, error=error, send=send, refused=refused):
+                    if data.startswith(b"WM2 BUZZ"):
+                        refused.append(data)
+                        raise error
+                    send(data, address)
+                t.send = failing
+                poll_while(c, clock, 8, lambda snap: snap.alert == "Player in the dead zone")
+                pings = len(t.ping_times)
+                run(c, clock, 1)
+                c.pause(); c.close()
+                self.assertTrue(refused)
+                self.assertEqual(set(refused), {b"WM2 BUZZ 400"})     # never sounded: no BUZZ 0 owed
+                self.assertGreater(len(t.ping_times), pings)          # tracking carried on
+
+    def test_buzz_stays_out_of_the_acoustic_schedule(self):
+        quiet, clock_q, tq = make(target=self.DEAD_ZONE)
+        loud, clock_l, tl = make(target=self.DEAD_ZONE, buzzer_node=1)
+        quiet.seq = loud.seq = 1000          # the start is wall-clock based: make them comparable
+        run(quiet, clock_q, 8); run(loud, clock_l, 8)
+        self.assertTrue(tl.buzzes)
+        self.assertEqual(tl.ping_times, tq.ping_times)               # same pings, same instants
+        self.assertEqual(tl.commands, tq.commands)                   # same AIM/FIRE, same sequences
+        self.assertEqual(loud.seq, quiet.seq)                        # BUZZ uses no sequence number
+        gaps = [b[0]-a[0] for a, b in zip(tl.ping_times, tl.ping_times[1:])]
+        self.assertGreaterEqual(min(gaps), 0.065)
+
+
 class CalibrationTests(unittest.TestCase):
     def test_empty_room_map_is_saved_on_the_sweep_grid_and_reloaded(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -183,6 +362,24 @@ class CalibrationTests(unittest.TestCase):
             self.assertTrue(c.paused)
             again = SwarmController(g, clock=clock, transport=t, calibration_path=path)
             self.assertEqual(again.background, profile["background"])
+
+    def test_naming_the_buzzer_box_keeps_a_saved_map_valid(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp)/"cal.json"
+            clock = Clock()
+            before = Geometry(sensor_y=0.5, body_radius_m=0.18, extra_sensor_x=(0.75,))
+            t = SimulatedTransport(clock, before)
+            first = SwarmController(before, clock=clock, transport=t, calibration_path=path)
+            background = {f"{n}:{b}": 1.5 for n in range(3) for b in first._grid(n)}
+            saved = first._json(asdict(before))
+            del saved["buzzer_node"]                 # a map written before the field existed
+            path.write_text(json.dumps({"version": 3, "geometry": saved, "background": background}))
+            for buzzer_node in (-1, 1):
+                after = Geometry(sensor_y=0.5, body_radius_m=0.18, extra_sensor_x=(0.75,),
+                                 buzzer_node=buzzer_node)
+                loaded = SwarmController(after, clock=clock, transport=t, calibration_path=path)
+                self.assertEqual(loaded.background, background)
+                self.assertEqual(loaded.calibration_message, "")
 
 
 class FuseTests(unittest.TestCase):

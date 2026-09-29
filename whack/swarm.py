@@ -21,6 +21,11 @@ as before. Servos move concurrently. The wire protocol is unchanged.
 Alerts (for the game layer, shown as a banner by the UI): a player nearer
 than min_player_range_m to a box, a player outside the field, and two
 players (two mutually inconsistent reliable detections that persist).
+
+Buzzer: while a near-wall alert is up (dead zone, or too close to a box) the
+box named by geometry.buzzer_node is sent WM2 BUZZ again and again, and one
+BUZZ 0 when that ends. BUZZ is not a ping and has no part in the acoustic
+schedule. The box silences itself if the laptop stops asking.
 """
 
 from __future__ import annotations
@@ -34,7 +39,7 @@ import statistics
 import time
 
 from .controller import Snapshot
-from .protocol import MAX_SEQUENCE, Range, Ready, aim, fire
+from .protocol import MAX_SEQUENCE, Range, Ready, aim, buzz, fire
 from .tracking import Geometry
 from .transport import SimulatedTransport, UdpTransport
 
@@ -167,6 +172,10 @@ class SwarmController:
     TWO_PLAYER_S = 1.0
     TOO_CLOSE_S = .3
     ALERT_LATCH_S = 2.0         # an alert stays up at least this long
+    BUZZ_MS = 400               # each BUZZ asks for this much sound...
+    BUZZ_INTERVAL_S = .2        # ...and is repeated this often, so one lost packet is not heard
+    DEAD_ZONE_ALERT = "Player in the dead zone"
+    TOO_CLOSE_ALERT = "Player too close to box "     # followed by the node number
     PINGS_PER_CALIBRATION_BEARING = 3
     LAYOUT_FIELDS = ("width", "near_y", "far_y", "left_x", "right_x", "sensor_y", "extra_sensor_x",
                      "sweep_bounds_deg", "sweep_step_deg")
@@ -192,6 +201,9 @@ class SwarmController:
         self.alert = ""
         self.alert_until = 0.0
         self.alert_since = {}
+        self.buzzing = False                   # a BUZZ > 0 was sent and not yet followed by BUZZ 0
+        self.buzz_sent_at = float("-inf")
+        self.buzz_address = None               # where the sound was last requested
         self.inconsistent = deque(maxlen=32)   # times two boxes disagreed about where the player is
         self.outside_since = None
         self.too_close_since = {}
@@ -244,6 +256,7 @@ class SwarmController:
         if self.simulate or self.calibrating:
             return
         self._cancel_all()
+        self._silence_buzzer()
         self.paused = False
         self.calibrating, self.state = True, "calibration"
         self.background = {}
@@ -267,6 +280,7 @@ class SwarmController:
             return
         self.paused = True
         self._cancel_all()
+        self._silence_buzzer()
         if self.calibrating:
             self.calibrating = False
             self.background = {}
@@ -295,12 +309,14 @@ class SwarmController:
     def close(self):
         self._cancel_all()
         try:
+            self._silence_buzzer()
             self.park_servos()
         finally:
             self.transport.close()
 
     def _clear_player(self):
         self._cancel_all()
+        self._silence_buzzer()
         self.estimate.reset(); self.contributions.clear(); self.good_times.clear()
         self.state, self.reason, self.alert = "find", "Waiting for measurements", ""
         self.alert_since.clear(); self.outside_since = None; self.too_close_since.clear()
@@ -667,16 +683,55 @@ class SwarmController:
                         box.txn.done = True; box.txn = None; self.firing = None
                     break
         self._update_alerts(now)
+        self._update_buzzer(now)
         return self._snapshot(now, online, ready_to_run)
 
     def _raise(self, text, now):
         self.alert, self.alert_until = text, now + self.ALERT_LATCH_S
 
+    # ----- buzzer ---------------------------------------------------------
+    def _near_wall_alert(self):
+        """Only the alerts that mean 'step back from the wall' sound the buzzer."""
+        return self.alert == self.DEAD_ZONE_ALERT or self.alert.startswith(self.TOO_CLOSE_ALERT)
+
+    def _send_buzz(self, duration_ms, address):
+        try:
+            self.transport.send(buzz(duration_ms), address)
+        except (OSError, ValueError):
+            return False        # like a failed AIM: never let it out of poll()
+        return True
+
+    def _silence_buzzer(self):
+        """One BUZZ 0 after the sound was requested; nothing if it never was."""
+        if not self.buzzing:
+            return
+        self.buzzing = False
+        self.buzz_sent_at = float("-inf")     # the next alert sounds without delay
+        # A lost BUZZ 0 is covered by the box itself: it stops at its deadline.
+        self._send_buzz(0, self.buzz_address)
+
+    def _update_buzzer(self, now):
+        node = self.geometry.buzzer_node
+        if node < 0:
+            return
+        address = None
+        if self._near_wall_alert() and not self.paused and not self.calibrating:
+            address = self.transport.address(node)
+            if address and self.transport.protocol_version(node) != 2:
+                address = None
+        if not address:
+            self._silence_buzzer()
+        elif now - self.buzz_sent_at >= self.BUZZ_INTERVAL_S - 1e-9 or address != self.buzz_address:
+            if self.buzzing and address != self.buzz_address:
+                self._silence_buzzer()         # the box moved to another address
+            if self._send_buzz(self.BUZZ_MS, address):
+                self.buzzing, self.buzz_sent_at, self.buzz_address = True, now, address
+
     def _update_alerts(self, now):
         g = self.geometry
         close = [n for n, t in self.too_close_since.items() if now - t >= self.TOO_CLOSE_S]
         if close:
-            self._raise(f"Player too close to box {close[0]}", now)
+            self._raise(f"{self.TOO_CLOSE_ALERT}{close[0]}", now)
             return
         recent = [t for t in self.inconsistent if now - t <= 3.0]
         if len(recent) >= 2 and recent[-1] - recent[0] >= self.TWO_PLAYER_S:
@@ -695,7 +750,7 @@ class SwarmController:
             if outside:
                 self.outside_since = self.outside_since or now
                 if now - self.outside_since >= self.OUTSIDE_S:
-                    self._raise("Player in the dead zone" if dead_zone else "Player outside the field", now)
+                    self._raise(self.DEAD_ZONE_ALERT if dead_zone else "Player outside the field", now)
                     return
             else:
                 self.outside_since = None
