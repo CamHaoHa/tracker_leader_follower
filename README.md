@@ -19,6 +19,10 @@ positional servo on each. Every box uses the same pins:
 | Servo signal | 33 |
 | HC-SR04 TRIG | 32 |
 | HC-SR04 ECHO, wired directly (sensor powered from 3V3, no divider) | 34 |
+| Buzzer +, **middle box only** (buzzer − to GND) | 25 |
+
+The buzzer sounds while a player is in the dead zone or too close to a box; see
+[the buzzer section of the live setup](docs/live-tracker-setup.md#buzzer).
 
 Measure the mounting geometry and calibrate the servo direction, travel and
 loaded settling time before running a sweep.
