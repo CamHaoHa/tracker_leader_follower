@@ -131,8 +131,13 @@ static_assert(ULTRASONIC_MIN_GAP_MS >= 65, "Leave at least 65 ms between pings")
 static_assert(SERVO_PIN != ULTRASONIC_TRIG_PIN && SERVO_PIN != ULTRASONIC_ECHO_PIN &&
                   ULTRASONIC_TRIG_PIN != ULTRASONIC_ECHO_PIN,
               "Servo, trigger and echo must use distinct pins");
-static_assert(BUZZER_PIN == -1 || (BUZZER_PIN >= 0 && BUZZER_PIN <= 33),
-              "BUZZER_PIN must be -1 (no buzzer) or an output pin; GPIO34..39 are input-only");
+// GPIO1 and GPIO3 are the USB serial port and GPIO6..11 are wired to the
+// module's flash chip: a buzzer on any of them stops the board from running.
+static_assert(BUZZER_PIN == -1 ||
+                  (BUZZER_PIN >= 0 && BUZZER_PIN <= 33 && BUZZER_PIN != 1 && BUZZER_PIN != 3 &&
+                   !(BUZZER_PIN >= 6 && BUZZER_PIN <= 11)),
+              "BUZZER_PIN must be -1 (no buzzer) or a free output pin: not GPIO1/GPIO3 (serial), "
+              "GPIO6..11 (flash) or GPIO34..39 (input-only)");
 static_assert(BUZZER_PIN < 0 || (BUZZER_PIN != SERVO_PIN && BUZZER_PIN != ULTRASONIC_TRIG_PIN &&
                                  BUZZER_PIN != ULTRASONIC_ECHO_PIN),
               "The buzzer must not share a pin with the servo, trigger or echo");
