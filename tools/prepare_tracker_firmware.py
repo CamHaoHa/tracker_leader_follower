@@ -103,9 +103,11 @@ def config_template(side: str, node_id: int) -> str:
 #define ONENET_SERVER_DOMAIN "radius.mq.edu.au"
 #define ONENET_BUILD_TIMEZONE "AEST-10AEDT,M10.1.0,M4.1.0/3"
 
-#define SERVO_PIN 25
+// Same pin map on every box. GPIO34 is input-only with no internal pull
+// resistors; power the sensor from 3V3 and wire ECHO directly (no divider).
+#define SERVO_PIN 33
 #define ULTRASONIC_TRIG_PIN 32
-#define ULTRASONIC_ECHO_PIN 35
+#define ULTRASONIC_ECHO_PIN 34
 
 // World bearings: 0 = right, 90 = into the field, 180 = left.
 // Check your servo's mounting and specifications before scanning.
