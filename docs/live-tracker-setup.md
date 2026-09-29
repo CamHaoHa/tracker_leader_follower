@@ -139,7 +139,9 @@ draws more needs a transistor between the pin and the buzzer.
 **What makes it sound.** With `"buzzer_node": 1` in `config.local.json`, the
 default swarm tracker sounds the buzzer while the banner shows **Player in the
 dead zone** or **Player too close to box n**. The sound follows the banner,
-which stays up for at least 2 s after the last such reading. It is silent for
+which stays up for at least 2 s after the last such reading. A box that goes
+offline, or reports nothing for 1.5 s, no longer counts as reporting a player
+too close, so a box that drops out cannot keep the sound going. It is silent for
 *Player outside the field* and *Two players detected*, while paused and during
 calibration. Leave `buzzer_node` out, or set it to `-1`, for no buzzer. The
 older `--tracker pairs` never sounds it. With three boxes node 1 is the middle
@@ -162,12 +164,43 @@ again. The pin is then held HIGH while sounding.
 config file that already exists. At boot the middle box prints
 `Buzzer: pin=25, 2000 Hz tone` and every other box prints `Buzzer: none`.
 
+A box that prints no `Buzzer:` line at all runs firmware from before the buzzer
+existed. It drops `WM2 BUZZ` without a sound. Such a build has the same pins and
+tracks normally, so it may stay on the left and right boxes, but the middle box
+needs the current firmware: build `node_middle` from this repository's
+`firmware/` directory, with the `BUZZER_PIN` block in its `config.local.h`.
+
+In a two-box layout node 1 is the right box, and the two build paths differ:
+the PlatformIO `node_right_pair` build drives GPIO25, because `config.example.h`
+sets the pin for node 1, while a generated `tracker_right_pair/tracker_config.h`
+has no `BUZZER_PIN`. Add `#define BUZZER_PIN 25` to that file if a two-box right
+box is to carry the buzzer. With nothing wired to GPIO25 neither is audible.
+
 To hear it without the tracker, close the visualizer (it owns UDP 4210) and
 send one second of sound from the project root, replacing `MIDDLE_BOX_IP`:
 
 ```bash
 python3 -c "import socket; from whack.protocol import buzz; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(('0.0.0.0', 4210)); s.sendto(buzz(1000), ('MIDDLE_BOX_IP', 4211))"
 ```
+
+**Check that the sound does not disturb the sensor.** This has not been
+measured yet. The buzzer is on the same box as an HC-SR04, and a 2000 Hz
+square wave has harmonics near the sensor's 40 kHz. A false short range while
+the buzzer sounds could keep a *too close* alert, and so the sound, alive. With
+the visualizer closed and a fixed target about 1 m in front of the middle box,
+probe it silent and then sounding:
+
+```bash
+python3 -m tools.probe_node --ip MIDDLE_BOX_IP --node 1 --angle 90 --count 20
+python3 -m tools.probe_node --ip MIDDLE_BOX_IP --node 1 --angle 90 --count 20 --buzz
+```
+
+`--buzz` sounds the buzzer for the whole run and silences it at the end. The
+two summaries should agree: the same number of valid readings, and a median
+inside the range the silent run printed. Repeat with nothing in front of the box; the
+sounding run must not report a range where the silent run reports `TIMEOUT`. If
+the runs differ, lower `BUZZER_TONE_HZ`, or move the buzzer away from the
+sensor, and check again.
 
 ## Upload both tracking sketches in Arduino IDE
 

@@ -215,6 +215,11 @@ channel 2, 10-bit, 50 % duty while sounding and duty 0 when silent. The servo
 keeps channel 0 and its own 50 Hz timer. Set `BUZZER_TONE_HZ 0` for an active
 buzzer; the pin is then held HIGH while sounding. With `#if NODE_ID == 1` the
 `node_right_pair` build (node 1 of a two-box layout) drives GPIO25 as well.
+The generated Arduino sketches differ there: only `tracker_middle` is created
+with `BUZZER_PIN`, and `tracker_right_pair` has none unless it is added to its
+`tracker_config.h`. `BUZZER_PIN` may not be GPIO1 or GPIO3 (serial), GPIO6..11
+(flash), GPIO34..39 (input-only) or a pin the servo or sensor uses; the build
+fails if it is.
 
 ### Aim both, fire one at a time
 
