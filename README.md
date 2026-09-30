@@ -12,9 +12,20 @@ and end-to-end delay have not yet been validated.** The simulator uses an ideal
 point reflector and cannot establish how accurately ultrasound follows a body.
 
 The current hardware is two Freenove ESP32-WROOM-32E boards with an HC-SR04 and
-positional servo on each. Current pins are servo GPIO25, TRIG GPIO32 and ECHO
-GPIO35 through the voltage divider. Measure the mounting geometry and calibrate
-the servo direction, travel and loaded settling time before running a sweep.
+positional servo on each. Every box uses the same pins:
+
+| Signal | ESP32 GPIO |
+| --- | --- |
+| Servo signal | 33 |
+| HC-SR04 TRIG | 32 |
+| HC-SR04 ECHO, wired directly (sensor powered from 3V3, no divider) | 34 |
+| Buzzer +, **middle box only** (buzzer − to GND) | 25 |
+
+The buzzer sounds while a player is in the dead zone or too close to a box; see
+[the buzzer section of the live setup](docs/live-tracker-setup.md#buzzer).
+
+Measure the mounting geometry and calibrate the servo direction, travel and
+loaded settling time before running a sweep.
 
 For the current 30–150° servo limits, follow the [first live test guide](docs/first-live-test.md)
 using the dedicated farther-back test field.

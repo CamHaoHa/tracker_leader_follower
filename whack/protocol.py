@@ -10,6 +10,8 @@ import re
 MAX_PACKET = 128
 MAX_SEQUENCE = 0xFFFFFFFF
 MAX_READY_LEASE_MS = 1000
+# Longest sound one BUZZ may request; the firmware refuses anything longer.
+MAX_BUZZ_MS = 2000
 
 
 @dataclass(frozen=True)
@@ -100,3 +102,14 @@ def aim(seq: int, angle_mdeg: int) -> bytes:
 def fire(seq: int) -> bytes:
     _command_bounds(seq)
     return f"WM2 FIRE {seq}".encode("ascii")
+
+
+def buzz(duration_ms: int) -> bytes:
+    """Sound a box's buzzer for duration_ms from receipt; 0 silences it at once.
+
+    BUZZ has no sequence and no reply. The box stops by itself at the deadline,
+    so the sender repeats the command for as long as the sound should last.
+    """
+    if type(duration_ms) is not int or not 0 <= duration_ms <= MAX_BUZZ_MS:
+        raise ValueError("Buzz duration out of bounds")
+    return f"WM2 BUZZ {duration_ms}".encode("ascii")

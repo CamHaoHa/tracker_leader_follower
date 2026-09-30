@@ -105,6 +105,9 @@ class Geometry:
     lock_max_jump_m: float = 0.25
     # Empty window scans in a row before the box gives up and searches again (LOST_LIMIT).
     lock_lost_limit: int = 4
+    # Node that carries the near-wall warning buzzer; -1 = no buzzer. Not a
+    # layout value: changing it never invalidates a saved calibration.
+    buzzer_node: int = -1
 
     def __post_init__(self):
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
@@ -147,6 +150,8 @@ class Geometry:
         if not (1 <= self.lock_step_deg <= 30 and self.lock_step_deg <= self.lock_window_deg <= 90
                 and 0.05 <= self.lock_max_jump_m <= 2 and 1 <= self.lock_lost_limit <= 50):
             raise ValueError("Invalid lock-scan step, window, jump or lost limits")
+        if type(self.buzzer_node) is not int or not -1 <= self.buzzer_node < self.sensor_count:
+            raise ValueError("buzzer_node must be -1 (no buzzer) or the index of a sensor node")
 
     @property
     def sensor_count(self) -> int:

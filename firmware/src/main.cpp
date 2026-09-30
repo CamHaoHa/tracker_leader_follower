@@ -63,6 +63,14 @@ constexpr uint32_t kSessionIdleMs = 30000;
 constexpr uint8_t kServoChannel = 0;
 constexpr uint8_t kServoBits = 16;
 constexpr uint32_t kServoPeriodUs = 20000;
+#if BUZZER_PIN >= 0 && BUZZER_TONE_HZ > 0
+// A LEDC timer has one frequency, and the servo needs its 50 Hz on channel 0.
+// Core 2.x ties channels to timers in pairs (0+1, 2+3, ...), so the tone must
+// stay off channel 1; channel 2 runs from the next timer. Core 3.x picks a
+// free timer for a new frequency, so channel 2 is independent there as well.
+constexpr uint8_t kBuzzerChannel = 2;
+constexpr uint8_t kBuzzerBits = 10;
+#endif
 constexpr size_t kCacheSize = 16;
 
 WiFiUDP udp;
@@ -91,6 +99,12 @@ uint32_t last_slew_at = 0;
 constexpr uint32_t kServoSlewMdegPerMs = 150;
 uint32_t slew_rate_mdeg_per_ms = kServoSlewMdegPerMs;
 uint32_t current_bearing_mdeg = 90000;
+#if BUZZER_PIN >= 0
+// The buzzer is separate from tracking: no owner, sequence, lease or reply.
+wm::BuzzTimer buzzer;
+bool buzzer_ready = false;
+bool buzzer_on = false;
+#endif
 
 // Cache completed FIRE results verbatim; a UDP retry must not emit another ping.
 // UDP may lose, delay, reorder or duplicate a datagram. Remembering the original
@@ -256,6 +270,42 @@ void write_servo(int32_t position_mdeg) {
   ledcWriteChannel(kServoChannel, duty);
 #else
   ledcWrite(kServoChannel, duty);
+#endif
+}
+
+#if BUZZER_PIN >= 0
+void write_buzzer(bool on) {
+  if (!buzzer_ready || on == buzzer_on) return;
+  buzzer_on = on;
+#if BUZZER_TONE_HZ > 0
+  // Passive buzzer: a 50 % square wave at BUZZER_TONE_HZ, duty 0 when silent.
+  const uint32_t duty = on ? (1UL << kBuzzerBits) / 2 : 0;
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  ledcWriteChannel(kBuzzerChannel, duty);
+#else
+  ledcWrite(kBuzzerChannel, duty);
+#endif
+#else
+  digitalWrite(BUZZER_PIN, on ? HIGH : LOW);  // Active buzzer: steady level.
+#endif
+}
+#endif
+
+void handle_buzz(uint32_t duration_ms) {
+  // Sound until now + duration; each BUZZ replaces the deadline and 0 silences
+  // at once. A box without a buzzer accepts the command and does nothing.
+#if BUZZER_PIN >= 0
+  write_buzzer(buzzer.command(millis(), duration_ms));
+#else
+  (void)duration_ms;
+#endif
+}
+
+void buzzer_tick() {
+  // Failsafe: the board ends the sound itself. The laptop has to keep asking,
+  // so one that crashed or left the network cannot leave the buzzer on.
+#if BUZZER_PIN >= 0
+  if (buzzer.expired(millis())) write_buzzer(false);
 #endif
 }
 
@@ -467,7 +517,11 @@ void receive_commands() {
       // Discovery is read-only and never touches owner/sequence/servo/lease state.
       // Reply to the actual source port so diagnostics can use an ephemeral port.
       if (command.kind == wm::CommandKind::Discover) send_hello(address, port);
-      else if (port == kHostPort) handle_command(address, command);
+      else if (port != kHostPort) continue;
+      // Like discovery, BUZZ stays outside the AIM/FIRE transactions: it takes
+      // no ownership, uses no sequence, revokes no lease and sends no reply.
+      else if (command.kind == wm::CommandKind::Buzz) handle_buzz(command.duration_ms);
+      else handle_command(address, command);
     }
   }
 }
@@ -681,6 +735,26 @@ void setup() {
     }
   }
   if (!servo_ready) Serial.println("Servo configuration failed; commands will return INVALID");
+#if BUZZER_PIN >= 0
+#if BUZZER_TONE_HZ > 0
+#if ESP_ARDUINO_VERSION_MAJOR >= 3
+  buzzer_ready = ledcAttachChannel(BUZZER_PIN, BUZZER_TONE_HZ, kBuzzerBits, kBuzzerChannel);
+  if (buzzer_ready) ledcWriteChannel(kBuzzerChannel, 0);
+#else
+  buzzer_ready = ledcSetup(kBuzzerChannel, BUZZER_TONE_HZ, kBuzzerBits) != 0;
+  if (buzzer_ready) {
+    ledcAttachPin(BUZZER_PIN, kBuzzerChannel);  // Attaches with duty 0: silent.
+    ledcWrite(kBuzzerChannel, 0);
+  }
+#endif
+#else
+  digitalWrite(BUZZER_PIN, LOW);
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  buzzer_ready = true;
+#endif
+  if (!buzzer_ready) Serial.println("Buzzer configuration failed; BUZZ commands are ignored");
+#endif
   WiFi.persistent(false);
 #if WIFI_PROFILE == 3 && NODE_ID == 0
   // Wi-Fi events run on another task. Only the loop edits UDP/session state.
@@ -697,9 +771,18 @@ void setup() {
   Serial.printf("Tracker node %u, Arduino %u.%u.%u, Wi-Fi profile %u\n", NODE_ID,
                 ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH,
                 WIFI_PROFILE);
-  Serial.printf("Pins: servo=%u, TRIG=%u, ECHO=%u (ECHO requires a voltage divider)\n",
+  Serial.printf("Pins: servo=%u, TRIG=%u, ECHO=%u (sensor on 3V3, ECHO wired directly)\n",
                 static_cast<unsigned>(SERVO_PIN), static_cast<unsigned>(ULTRASONIC_TRIG_PIN),
                 static_cast<unsigned>(ULTRASONIC_ECHO_PIN));
+#if BUZZER_PIN < 0
+  Serial.println("Buzzer: none");
+#elif BUZZER_TONE_HZ > 0
+  Serial.printf("Buzzer: pin=%u, %u Hz tone\n", static_cast<unsigned>(BUZZER_PIN),
+                static_cast<unsigned>(BUZZER_TONE_HZ));
+#else
+  Serial.printf("Buzzer: pin=%u, steady HIGH (active buzzer)\n",
+                static_cast<unsigned>(BUZZER_PIN));
+#endif
   if (selected_ssid()[0] == '\0')
     Serial.println("No Wi-Fi credentials: edit tracker_config.h (Arduino IDE) or include/config.local.h (PlatformIO)");
 }
@@ -712,6 +795,7 @@ void loop() {
   // There is no autonomous scan or player prediction on the board. Ultrasound
   // happens only for a permitted FIRE (or the retained WM1 measurement command).
   slew_servo();
+  buzzer_tick();
   network_tick();
   if (udp_ready) {
     settle_if_ready();

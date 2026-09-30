@@ -91,11 +91,15 @@ numbers:
 
 | Signal | ESP32 GPIO |
 | --- | --- |
-| Servo signal | 25 |
+| Servo signal | 33 |
 | HC-SR04 TRIG | 32 |
-| HC-SR04 ECHO through voltage divider | 35 |
+| HC-SR04 ECHO, wired directly | 34 |
+| Buzzer +, middle box only | 25 |
 
-Keep the ECHO divider and shared grounds from the bench setup. Supply the servo
+Power each HC-SR04 from the ESP32 3V3 pin and wire ECHO straight to GPIO34:
+there is no divider. GPIO34 is input-only and has no internal pull resistors.
+A sensor powered from 5 V must not be wired this way, because its ECHO would
+be a 5 V signal. Keep the shared grounds from the bench setup. Supply the servo
 from its rated external supply. The ESP32 3.3 V pin is not a servo power supply.
 A continuous-rotation servo cannot use this positional control scheme.
 
@@ -118,6 +122,86 @@ The 200 cm limit belongs to the earlier bench sketch. Tracking firmware accepts
 up to 400 cm, because a diagonal path across the default field is approximately
 234 cm. The desktop application filters positions to the configured play area.
 
+## Buzzer
+
+The middle box (node 1) carries a buzzer that warns a player who is too close
+to the screen wall. No other box has one.
+
+| Buzzer lead | Middle box |
+| --- | --- |
+| + | GPIO25 |
+| − | GND |
+
+A GPIO pin supplies only a small current (about 20 mA). A piezo buzzer or a
+buzzer module with its own transistor can be wired as above; anything that
+draws more needs a transistor between the pin and the buzzer.
+
+**What makes it sound.** With `"buzzer_node": 1` in `config.local.json`, the
+default swarm tracker sounds the buzzer while the banner shows **Player in the
+dead zone** or **Player too close to box n**. The sound follows the banner,
+which stays up for at least 2 s after the last such reading. A box that goes
+offline, or reports nothing for 1.5 s, no longer counts as reporting a player
+too close, so a box that drops out cannot keep the sound going. It is silent for
+*Player outside the field* and *Two players detected*, while paused and during
+calibration. Leave `buzzer_node` out, or set it to `-1`, for no buzzer. The
+older `--tracker pairs` never sounds it. With three boxes node 1 is the middle
+box; a two-box layout has no middle box and its node 1 is the right box.
+
+**Failsafe.** While the alert lasts the laptop sends `WM2 BUZZ 400` every 0.2 s,
+then `WM2 BUZZ 0` once. Each command only moves the box's own deadline, and the
+box silences itself when that deadline passes. One command can ask for at most
+2 s, so a laptop that crashes or leaves the network cannot leave the buzzer
+sounding.
+
+**Passive or active buzzer.** The firmware default, `BUZZER_TONE_HZ 2000`, drives
+a passive buzzer with a 2000 Hz square wave. An active buzzer has its own
+oscillator: set `#define BUZZER_TONE_HZ 0` in `config.local.h` (PlatformIO) or
+the middle sketch's `tracker_config.h` (Arduino IDE) and upload the middle box
+again. The pin is then held HIGH while sounding.
+
+`BUZZER_PIN 25` is set for node 1 by `config.example.h` and by a newly generated
+`tracker_middle/tracker_config.h`; add `#define BUZZER_PIN 25` by hand to a
+config file that already exists. At boot the middle box prints
+`Buzzer: pin=25, 2000 Hz tone` and every other box prints `Buzzer: none`.
+
+A box that prints no `Buzzer:` line at all runs firmware from before the buzzer
+existed. It drops `WM2 BUZZ` without a sound. Such a build has the same pins and
+tracks normally, so it may stay on the left and right boxes, but the middle box
+needs the current firmware: build `node_middle` from this repository's
+`firmware/` directory, with the `BUZZER_PIN` block in its `config.local.h`.
+
+In a two-box layout node 1 is the right box, and the two build paths differ:
+the PlatformIO `node_right_pair` build drives GPIO25, because `config.example.h`
+sets the pin for node 1, while a generated `tracker_right_pair/tracker_config.h`
+has no `BUZZER_PIN`. Add `#define BUZZER_PIN 25` to that file if a two-box right
+box is to carry the buzzer. With nothing wired to GPIO25 neither is audible.
+
+To hear it without the tracker, close the visualizer (it owns UDP 4210) and
+send one second of sound from the project root, replacing `MIDDLE_BOX_IP`:
+
+```bash
+python3 -c "import socket; from whack.protocol import buzz; s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(('0.0.0.0', 4210)); s.sendto(buzz(1000), ('MIDDLE_BOX_IP', 4211))"
+```
+
+**Check that the sound does not disturb the sensor.** This has not been
+measured yet. The buzzer is on the same box as an HC-SR04, and a 2000 Hz
+square wave has harmonics near the sensor's 40 kHz. A false short range while
+the buzzer sounds could keep a *too close* alert, and so the sound, alive. With
+the visualizer closed and a fixed target about 1 m in front of the middle box,
+probe it silent and then sounding:
+
+```bash
+python3 -m tools.probe_node --ip MIDDLE_BOX_IP --node 1 --angle 90 --count 20
+python3 -m tools.probe_node --ip MIDDLE_BOX_IP --node 1 --angle 90 --count 20 --buzz
+```
+
+`--buzz` sounds the buzzer for the whole run and silences it at the end. The
+two summaries should agree: the same number of valid readings, and a median
+inside the range the silent run printed. Repeat with nothing in front of the box; the
+sounding run must not report a range where the silent run reports `TIMEOUT`. If
+the runs differ, lower `BUZZER_TONE_HZ`, or move the buzzer away from the
+sensor, and check again.
+
 ## Upload both tracking sketches in Arduino IDE
 
 From the project root, prepare the Arduino folders:
@@ -130,7 +214,10 @@ The generator copies the maintained firmware into three independent Arduino sket
 folders named by box position: left (node 0), middle (node 1) and right (node 2),
 plus right_pair (node 1) for the right box of a two-box layout, and preconfigures them for the same TrackerNet access point. Re-running
 the generator without a network argument refreshes code while retaining your
-configuration and selected network mode.
+configuration and selected network mode. That also means an existing
+`tracker_config.h` keeps the pins it was created with: if it still says servo 25
+and ECHO 35, change its `SERVO_PIN`, `ULTRASONIC_TRIG_PIN` and
+`ULTRASONIC_ECHO_PIN` lines to 33, 32 and 34 by hand.
 
 1. Open `firmware/arduino/tracker_left/tracker_left.ino` in Arduino IDE.
 2. Check the servo settings in `tracker_config.h`. The `tracker_network.h` tab

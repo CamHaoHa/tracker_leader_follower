@@ -44,6 +44,24 @@ class PrepareTrackerFirmwareTests(unittest.TestCase):
         self.assertIn("#define WIFI_PROFILE 0", template)
         self.assertIn("Arduino-ESP32 3.3+", template)
 
+    def test_template_uses_the_shared_pin_map_and_only_the_middle_box_has_a_buzzer(self):
+        for side, node_id in (("left", 0), ("middle", 1), ("right", 2), ("right_pair", 1)):
+            template = config_template(side, node_id)
+            for line in ("#define SERVO_PIN 33", "#define ULTRASONIC_TRIG_PIN 32",
+                         "#define ULTRASONIC_ECHO_PIN 34"):
+                self.assertIn(line, template.splitlines())
+            self.assertEqual("#define BUZZER_PIN 25" in template.splitlines(), side == "middle", side)
+
+    def test_firmware_defaults_match_the_template_pin_map(self):
+        settings = (FIRMWARE / "include" / "settings.h").read_text()
+        example = (FIRMWARE / "include" / "config.example.h").read_text()
+        for line in ("#define SERVO_PIN 33", "#define ULTRASONIC_TRIG_PIN 32",
+                     "#define ULTRASONIC_ECHO_PIN 34"):
+            self.assertIn(line, settings.splitlines())
+            self.assertIn(line, example.splitlines())
+        self.assertIn("#define BUZZER_PIN -1", settings.splitlines())   # no buzzer unless configured
+        self.assertIn("#if NODE_ID == 1\n#define BUZZER_PIN 25\n#endif\n", example)
+
     def test_check_reports_missing_and_stale_sources_without_writing(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp) / "absent"

@@ -24,5 +24,6 @@
   "lock_step_deg": 3.0,
   "lock_window_deg": 15.0,
   "lock_max_jump_m": 0.25,
-  "lock_lost_limit": 4
+  "lock_lost_limit": 4,
+  "buzzer_node": 1
 }

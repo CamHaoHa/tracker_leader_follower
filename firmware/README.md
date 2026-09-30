@@ -14,19 +14,22 @@ The user's hardware is a Freenove ESP32-WROOM-32E board and HC-SR04 sensor per u
 
 | Signal | ESP32 connection |
 | --- | --- |
-| Servo control | GPIO25 |
+| Servo control | GPIO33 |
 | Ultrasonic TRIG | GPIO32 |
-| Ultrasonic ECHO | GPIO35, **through a 5 V to 3.3 V level shifter/divider** |
+| Ultrasonic ECHO | GPIO34, **wired directly** (sensor powered from 3V3) |
 | Ultrasonic ground | ESP32 ground |
 | Servo ground | ESP32 ground and external supply ground |
 | Servo power | Separate regulated supply rated for the servo voltage and stall current |
-| HC-SR04 supply | Regulated 5 V, according to the sensor's specification |
+| HC-SR04 supply | ESP32 3V3 |
+| Buzzer, **middle box only** | Buzzer + to GPIO25, buzzer − to ESP32 ground |
 
 Keep a common ground within each unit. Do not power a servo from ESP32 3V3 or GPIO pins. A suitable external servo supply avoids regulator overload and Wi-Fi brownouts. During USB programming, avoid connecting another source to the board's 5 V input unless the exact board supports that arrangement; the separately powered servo still needs a shared ground.
 
-Treat ECHO as 5 V unless your exact sensor explicitly provides a 3.3 V-safe output. For a nominal 5 V ECHO, a divider can use **2.2 kΩ from ECHO to GPIO35 and 3.3 kΩ from GPIO35 to ground**, producing approximately 3.0 V. Confirm its output against your sensor and supply voltage. The ESP32 uses 3.3 V logic; see [Espressif's electrical specifications](https://documentation.espressif.com/esp32_datasheet_en.pdf). If the sensor does not accept a 3.3 V TRIG input, add a suitable level shifter in that direction too.
+The sensor is powered from the ESP32's 3V3 pin, so its ECHO output is a 3.3 V signal and goes to GPIO34 directly: there is no divider. **Do not move the sensor supply to 5 V while ECHO is wired directly.** A 5 V ECHO needs a divider or level shifter again, for example 2.2 kΩ from ECHO to the GPIO and 3.3 kΩ from the GPIO to ground (approximately 3.0 V). The ESP32 uses 3.3 V logic; see [Espressif's electrical specifications](https://documentation.espressif.com/esp32_datasheet_en.pdf). The classic HC-SR04 is specified for 5 V and only the 3–5.5 V revisions range reliably on 3V3, so check every sensor with `arduino/bench_test` before mounting it.
 
-On classic ESP32 boards, GPIO32 supports the trigger output and GPIO35 is input-only, suitable for ECHO. GPIO25/32/35 have no boot strapping restriction in [Espressif's GPIO table](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html). Check the silkscreen's **GPIO numbers**, not header positions.
+On classic ESP32 boards, GPIO32 and GPIO33 support output (trigger and servo signal). GPIO34 is input-only and has no internal pull-up or pull-down resistor, which suits ECHO: the sensor drives that line both ways. GPIO32/33/34 have no boot strapping restriction in [Espressif's GPIO table](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html). Check the silkscreen's **GPIO numbers**, not header positions.
+
+These are the firmware defaults (`include/settings.h`). A local `config.local.h` or a generated `tracker_config.h` overrides them and is never rewritten by the tools: a file written for the old map (servo GPIO25, ECHO GPIO35) must have its three pin lines changed by hand.
 
 ## Configure and flash
 
@@ -159,7 +162,9 @@ circle intersection, estimates velocity, predicts aiming directions, and uses
 bounded local recovery after missed echoes. **Space/R** restarts acquisition;
 **D** shows measurement age, update rate and confidence. The single spot is solid
 for measured estimates and hollow/dim for short prediction, then disappears when
-lost or outside the field. There are no game zones or warning sounds.
+lost or outside the field. There are no game zones. The only sound is the
+middle box's buzzer, which the default swarm tracker sounds during a near-wall
+alert (see [Buzzer](#buzzer)).
 
 See [the full workflow](../docs/player-tracking-workflow.md). Servo directions,
 human echoes and actual delay must still be tested with the two physical units.
@@ -185,6 +190,36 @@ claim control ownership, change sequence ordering or alter firing permissions.
 The laptop requires a fresh compatible node identity; protocol freshness expires
 after six seconds. Knowing a configured IP does not establish that the board is
 online or still running WM2 firmware.
+
+### Buzzer
+
+A box built with `BUZZER_PIN` sounds its buzzer on request. Only the middle box
+(node 1) has one, on GPIO25; `BUZZER_PIN` defaults to `-1`, no buzzer.
+
+```text
+WM2 BUZZ 400
+```
+
+The single field is a duration of 0..2000 ms. The buzzer sounds until that long
+after receipt. Every new BUZZ replaces the deadline, and `WM2 BUZZ 0` silences
+at once. The board silences itself when the deadline passes: the laptop repeats
+the command while the sound should continue, so a laptop that stops or leaves
+the network cannot leave the buzzer on for more than 2 s.
+
+BUZZ must come from the laptop's UDP 4210. It has no sequence number and no
+reply. Like DISCOVER it claims no control ownership and leaves aims, firing
+leases and ping spacing alone. A box without a buzzer ignores it.
+
+`BUZZER_TONE_HZ` (default 2000) is the square wave for a passive buzzer: LEDC
+channel 2, 10-bit, 50 % duty while sounding and duty 0 when silent. The servo
+keeps channel 0 and its own 50 Hz timer. Set `BUZZER_TONE_HZ 0` for an active
+buzzer; the pin is then held HIGH while sounding. With `#if NODE_ID == 1` the
+`node_right_pair` build (node 1 of a two-box layout) drives GPIO25 as well.
+The generated Arduino sketches differ there: only `tracker_middle` is created
+with `BUZZER_PIN`, and `tracker_right_pair` has none unless it is added to its
+`tracker_config.h`. `BUZZER_PIN` may not be GPIO1 or GPIO3 (serial), GPIO6..11
+(flash), GPIO34..39 (input-only) or a pin the servo or sensor uses; the build
+fails if it is.
 
 ### Aim both, fire one at a time
 
@@ -274,8 +309,9 @@ g++ -std=c++11 -Wall -Wextra -Werror -Ifirmware/include firmware/test/protocol_t
 /tmp/whack-firmware-protocol-test
 ```
 
-Native tests cover malformed/overflowed inputs, discovery, sequence wraparound,
-lease consumption/expiry, reversed mounting, trim and travel-limit rejection.
+Native tests cover malformed/overflowed inputs, discovery, buzzer durations and
+the buzzer deadline, sequence wraparound, lease consumption/expiry, reversed
+mounting, trim and travel-limit rejection.
 Python simulation and loopback tests cover coordination and synthetic tracking.
 These checks do not exercise actual servo motion, radio transport or human
 ultrasonic reflections. No measured tracking rate or latency is claimed.
