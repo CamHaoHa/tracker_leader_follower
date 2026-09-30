@@ -31,6 +31,12 @@ class TrackerWindow:
     GRID_MAJOR = "#2E3E44"
     FRAME = "#55686F"
     GRID_STEP_M = 0.25
+    # Diagnostics overlay (D): where each box is looking and what it accepts.
+    WINDOW_FILL = "#0B2A31"     # scan window x range band of a locked box
+    BEAM_SEARCH = "#3D4E55"     # dashed: searching
+    BEAM_TRACK = "#1E8A9A"      # solid: scanning its window
+    LOCK = "#9AD7E0"            # ring: the box's locked point
+    BEAM_REACH_M = 2.5
 
     def __init__(self, root: tk.Tk, controller, simulate: bool = False) -> None:
         self.root = root
@@ -216,7 +222,13 @@ class TrackerWindow:
         canvas = self.canvas
         # Replace the previous frame rather than leaving a trail or a stale dot.
         canvas.delete("all")
+        snapshot = self.snapshot
+        boxes = getattr(snapshot, "boxes", ()) if self._diagnostics and snapshot else ()
+        if boxes:
+            self._draw_windows(canvas, boxes)
         self._draw_grid(canvas)
+        if boxes:
+            self._draw_beams(canvas, boxes)
         if self._position is not None:
             x, y = self._screen(self._position)
             radius = 10
@@ -226,7 +238,6 @@ class TrackerWindow:
                                fill="" if predicted else self.DOT,
                                outline=self.PREDICTED_DOT if predicted else "",
                                width=2, tags="position")
-        snapshot = self.snapshot
         if getattr(self.controller, "paused", False) is True:
             canvas.create_text(canvas.winfo_width() / 2, canvas.winfo_height() / 2,
                                text="PAUSED", fill=self.MUTED, font=self.FONT_BANNER, tags="paused")
@@ -256,11 +267,75 @@ class TrackerWindow:
                     f"Last measured fix: {age}    Confidence: {snapshot.confidence:.0%}",
                     "Hollow spot: one box only (pairs mode: extrapolated); solid spot: both boxes agree.",
                 ])
+                if boxes:
+                    lines.append("Overlay: dashed beam = searching, solid beam = scanning its window, "
+                                 "band = window x range accepted, ring = locked point.")
             if not self.simulate:
                 lines.append("Clear the tracking area before pressing C to calibrate.")
             canvas.create_text(14, 14,
                                text="\n".join(lines), anchor="nw", justify="left",
                                fill=self.MUTED, font=self.FONT_DIAGNOSTICS, tags="diagnostics")
+
+    def _polar_screen(self, sensor, bearing_deg, r):
+        a = math.radians(bearing_deg)
+        return self._screen((sensor[0] + r*math.cos(a), sensor[1] + r*math.sin(a)))
+
+    def _box_sensor(self, info):
+        node = info.get("node")
+        if not isinstance(node, int) or isinstance(node, bool) or not 0 <= node < self.geometry.sensor_count:
+            return None
+        return self.geometry.sensor_position(node)
+
+    def _draw_windows(self, canvas, boxes) -> None:
+        """Acceptance region of each locked box: its scan window across the range band.
+
+        Drawn before the grid so the grid stays on top. Field x is mirrored on
+        screen and y runs down it, so a world bearing b is Tk angle b+180.
+        """
+        arc = getattr(canvas, "create_arc", None)
+        if arc is None:
+            return
+        g = self.geometry
+        for info in boxes:
+            sensor, window, lock = self._box_sensor(info), info.get("window_deg"), info.get("lock")
+            if sensor is None or not window or not lock:
+                continue
+            (sx, sy), (lo, hi), r_lock = sensor, window, lock[1]
+            for r, colour in ((r_lock + g.lock_max_jump_m, self.WINDOW_FILL),
+                              (r_lock - g.lock_max_jump_m, self.BACKGROUND)):
+                if r <= 0:
+                    continue
+                x0, y0 = self._screen((sx - r, sy - r))
+                x1, y1 = self._screen((sx + r, sy + r))
+                arc(min(x0, x1), min(y0, y1), max(x0, x1), max(y0, y1), start=lo + 180, extent=hi - lo,
+                    style="pieslice", fill=colour, outline="", tags="boxes")
+
+    def _draw_beams(self, canvas, boxes) -> None:
+        """Each box's current beam, the edges of its window and its locked point."""
+        line = getattr(canvas, "create_line", None)
+        oval = getattr(canvas, "create_oval", None)
+        if line is None or oval is None:
+            return
+        g = self.geometry
+        for info in boxes:
+            sensor, bearing = self._box_sensor(info), info.get("bearing_deg")
+            if sensor is None or isinstance(bearing, bool) or not isinstance(bearing, (int, float)):
+                continue
+            px, py = self._screen(sensor)
+            tracking = info.get("mode") == "track"
+            ex, ey = self._polar_screen(sensor, bearing, self.BEAM_REACH_M)
+            if tracking:
+                line(px, py, ex, ey, fill=self.BEAM_TRACK, width=2, tags="boxes")
+            else:
+                line(px, py, ex, ey, fill=self.BEAM_SEARCH, width=1, dash=(6, 4), tags="boxes")
+            window, lock = info.get("window_deg"), info.get("lock")
+            if window and lock:
+                for edge in window:
+                    ex, ey = self._polar_screen(sensor, edge, lock[1] + g.lock_max_jump_m)
+                    line(px, py, ex, ey, fill=self.BEAM_TRACK, width=1, tags="boxes")
+            if lock:
+                lx, ly = self._polar_screen(sensor, lock[0], lock[1])
+                oval(lx - 5, ly - 5, lx + 5, ly + 5, outline=self.LOCK, width=2, fill="", tags="lock")
 
     def _draw_grid(self, canvas) -> None:
         """Field frame, 0.25 m grid, metre labels and a centre cross.

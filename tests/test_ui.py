@@ -31,10 +31,12 @@ class Canvas:
     def __init__(self):
         self.ovals = []
         self.texts = []
+        self.arcs = []
 
     def delete(self, tag):
         self.ovals.clear()
         self.texts.clear()
+        self.arcs.clear()
 
     def winfo_width(self): return 900
     def winfo_height(self): return 600
@@ -42,6 +44,7 @@ class Canvas:
     def create_text(self, *args, **kwargs): self.texts.append((args, kwargs))
     def create_line(self, *args, **kwargs): pass
     def create_rectangle(self, *args, **kwargs): pass
+    def create_arc(self, *args, **kwargs): self.arcs.append((args, kwargs))
 
     @property
     def overlay_texts(self):
@@ -122,6 +125,24 @@ class DisplayTests(unittest.TestCase):
         self.assertIn("220 ms", text)
         self.assertIn("90%", text)
         self.assertEqual(len(window.canvas.ovals), 1)
+
+    def test_diagnostics_overlay_draws_each_box_window_and_lock(self):
+        boxes = (
+            {"node": 0, "mode": "track", "bearing_deg": 60.0, "window_deg": (45.0, 75.0), "lock": (60.0, 1.1)},
+            {"node": 1, "mode": "search", "bearing_deg": 120.0},
+            {"node": "bad", "mode": "track", "bearing_deg": 1.0},
+        )
+        window = self.window(snapshot(boxes=boxes), snapshot(boxes=boxes))
+        window._tick()
+        self.assertEqual(len(window.canvas.ovals), 1)          # the spot only, overlay is off
+        window._diagnostics = True
+        window._tick()
+        rings = [o for o in window.canvas.ovals if o[1].get("tags") == "lock"]
+        self.assertEqual(len(rings), 1)
+        self.assertEqual(len(window.canvas.arcs), 2)           # outer band and its inner cut-out
+        outer = window.canvas.arcs[0][1]
+        self.assertEqual((outer["start"], outer["extent"]), (225.0, 30.0))
+        self.assertIn("Overlay:", window.canvas.overlay_texts[0][1]["text"])
 
     def test_pause_toggles_and_reset_delegates(self):
         window = self.window()
