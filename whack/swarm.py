@@ -277,6 +277,11 @@ class SwarmController:
     def resume(self):
         self.paused = False
 
+    def set_simulated_position(self, x, y):
+        """Mouse in the simulation window moves the ideal reflector."""
+        if self.simulate and hasattr(self.transport, "target"):
+            self.transport.target = (float(x), float(y))
+
     def reset(self):
         self.pause()
         self._clear_player()
@@ -629,11 +634,7 @@ class SwarmController:
                     txn.done = True; box.txn = None
         if len(online) < 2:
             self._cancel_all()
-        # loss handling
-        if self.state == "track" and now - self.estimate.last_good > g.local_search_s:
-            self.state = "find"
-            self.reason = "Player lost — sweeping"
-            self.contributions.clear()
+        self._expire(now)
         if ready_to_run:
             # aim every idle box
             for box in self.boxes:
@@ -669,6 +670,26 @@ class SwarmController:
         self._update_alerts(now)
         return self._snapshot(now, online, ready_to_run)
 
+    # ----- freshness hooks (lockscan.py overrides these) --------------------
+    def _expire(self, now):
+        """Loss rule: no fused fix within local_search_s means the player is gone."""
+        if self.state == "track" and now - self.estimate.last_good > self.geometry.local_search_s:
+            self.state = "find"
+            self.reason = "Player lost — sweeping"
+            self.contributions.clear()
+
+    def _fresh_fix(self, now):
+        """Is the estimate recent enough to alert on and to report a rate for?"""
+        return now - self.estimate.last_good <= self.geometry.local_search_s
+
+    def _confidence(self, now):
+        age = max(0.0, now - self.estimate.last_good)
+        return self.estimate.confidence*max(0.0, 1-age/self.geometry.local_search_s)
+
+    def _box_info(self):
+        """Per-box view for the diagnostics overlay: where each servo points."""
+        return tuple({"node": b.node, "mode": b.mode, "bearing_deg": b.bearing/1000} for b in self.boxes)
+
     def _raise(self, text, now):
         self.alert, self.alert_until = text, now + self.ALERT_LATCH_S
 
@@ -684,7 +705,7 @@ class SwarmController:
             return
         point = self.estimate.point
         fresh_contrib = [c for c in self.contributions.values() if now - c.time <= self.FUSE_WINDOW_S]
-        fresh = fresh_contrib and now - self.estimate.last_good <= g.local_search_s
+        fresh = fresh_contrib and self._fresh_fix(now)
         if point is not None and fresh:
             # A single box only knows the bearing to within its cone, so its fix
             # can poke past an edge while the player is inside. Demand a clear
@@ -726,9 +747,9 @@ class SwarmController:
         if self.alert:
             status = f"PAUSE: {self.alert}"
         rate = ((len(self.good_times)-1)/(self.good_times[-1]-self.good_times[0])
-                if len(self.good_times) > 1 and age <= g.local_search_s else 0.0)
+                if len(self.good_times) > 1 and self._fresh_fix(now) else 0.0)
         in_bounds = position is not None and 0 <= position[0] <= g.width and g.near_y <= position[1] <= g.far_y
         dead_zone = position is not None and 0 <= position[0] <= g.width and position[1] < g.near_y
-        confidence = self.estimate.confidence*max(0.0, 1-age/g.local_search_s) if position else 0.0
+        confidence = self._confidence(now) if position else 0.0
         return Snapshot(position, status, tuple(self.node_status), dead_zone, in_bounds, self.state,
-                        predicted, confidence, age, rate, self.alert, fresh_contrib)
+                        predicted, confidence, age, rate, self.alert, fresh_contrib, self._box_info())

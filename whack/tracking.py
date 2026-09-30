@@ -96,6 +96,15 @@ class Geometry:
     jitter_s: float = 1.0
     # Two reliable detections further apart than this are two bodies.
     two_player_separation_m: float = 0.6
+    # --- search -> lock -> window-scan tracking (whack/lockscan.py) ---
+    # Servo step for both the search sweep and the window scan (STEP_DEG).
+    lock_step_deg: float = 3.0
+    # Half-width of the window scanned either side of the locked bearing (WINDOW_DEG).
+    lock_window_deg: float = 15.0
+    # A window echo further than this from the locked range is another object (MAX_JUMP_CM).
+    lock_max_jump_m: float = 0.25
+    # Empty window scans in a row before the box gives up and searches again (LOST_LIMIT).
+    lock_lost_limit: int = 4
 
     def __post_init__(self):
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
@@ -135,6 +144,9 @@ class Geometry:
                 and 0 <= self.jitter_deg <= 45 and 0 <= self.jitter_s <= 5
                 and 0.2 <= self.two_player_separation_m <= 3):
             raise ValueError("Invalid sweep, range or jitter limits")
+        if not (1 <= self.lock_step_deg <= 30 and self.lock_step_deg <= self.lock_window_deg <= 90
+                and 0.05 <= self.lock_max_jump_m <= 2 and 1 <= self.lock_lost_limit <= 50):
+            raise ValueError("Invalid lock-scan step, window, jump or lost limits")
 
     @property
     def sensor_count(self) -> int:
