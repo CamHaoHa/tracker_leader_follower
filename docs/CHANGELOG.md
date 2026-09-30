@@ -1,3 +1,28 @@
+## 2026-09-30 — the sketch runs on the boxes (`--tracker sketch`)
+
+- Field finding with `--tracker lock` on three boxes: the servo steps 4–5×
+  slower than the sketch. Per ping the laptop-driven path pays the firmware
+  settle (60 ms + 3 ms/deg, not `delay(40)`), two Wi-Fi round trips with a
+  16 ms laptop tick each, and the shared acoustic slot (one ping in the air,
+  65 ms guard, three boxes): ~300 ms per ping, 3–4 s per 11-ping pass, vs
+  ~65 ms and 0.7 s on the box. The algorithm was identical; the execution was
+  not. The user wants the sketch as written, at its own speed.
+- `firmware/src/lockscan_main.cpp`: the sketch, unchanged, plus Wi-Fi join
+  (profile 0/1 from `config.local.h`), the laptop's address learned from any
+  packet to port 4211, HELLO every 2 s (broadcast until answered), and one
+  `LS <node> ...` line per ping (`PING`), lock (`LOCK`), pass (`TRACK`/`MISS`)
+  and loss (`LOST`). PlatformIO envs `lock_left`, `lock_middle`, `lock_right`
+  (NODE_ID 0/1/2) with `build_src_filter`; the WM2 envs exclude the file.
+  ESP32Servo 3.2.1 from the registry, default pulse range as in the sketch.
+- `whack/sketch.py`: `SketchController` listens only and draws the fusion of
+  every locked box (polar fix per box, `swarm.fuse` for two or more); no
+  calibration, no ping slot, no servo commands; Pause freezes the display
+  only. `SketchBox` is a line-for-line Python twin of the sketch (generator),
+  `SketchSimulator` runs one per box at the sketch's timing for `--simulate`,
+  `SketchUdp` is the listener. Simulation: 5.4 updates/s, 11/11 hits.
+- Not run on hardware yet: the three `lock_*` builds compile; the boxes still
+  carry the WM2 firmware until they are flashed.
+
 ## 2026-09-30 — lock-scan tracker (`--tracker lock`)
 
 - `whack/lockscan.py`: laptop-side port of the single-box search/track

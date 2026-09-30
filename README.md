@@ -63,7 +63,30 @@ For diagnostics without a window:
 python3 -m whack --simulate --headless --seconds 5
 ```
 
-### Try the lock-scan tracker
+### Run the lock-scan sketch on the boxes (`--tracker sketch`)
+
+The SEARCH/TRACK sketch runs **on each box, unchanged**, as the `lock_left`,
+`lock_middle` and `lock_right` builds (`firmware/src/lockscan_main.cpp`: the
+sketch plus Wi-Fi join and one UDP report line per ping and per pass). Each
+box searches 0–180° in 3° steps at its own pace (40 ms settle + echo, about
+15 pings/s), locks on the first echo nearer than 100 cm, scans ±15° round
+the lock, and gives up after 4 empty passes. Boxes never wait for each other
+and the laptop never commands them: it listens on UDP 4210 and draws the
+fusion of every locked box.
+
+```bash
+~/.platformio/penv/bin/pio run -d firmware -e lock_left -t upload    # then lock_middle, lock_right
+python3 -m whack --config config.local.json --tracker sketch --nodes IP0 IP1 IP2
+python3 -m whack --config config.local.json --simulate --tracker sketch
+```
+
+`--nodes` makes the laptop HELLO each box so it learns where to report; a
+box also broadcasts HELLO every 2 s until the laptop answers. There is no
+calibration or background map in this mode: a wall or the next box nearer
+than 100 cm locks a box exactly as the sketch would. The simulation runs a
+line-for-line Python twin of the sketch per box (`whack/sketch.py`).
+
+### Try the laptop-driven lock-scan tracker
 
 `--tracker lock` runs the search → lock → window-scan algorithm from the
 single-box Arduino sketch (`whack/lockscan.py`), one state machine per box, on
