@@ -8,6 +8,7 @@ import sys
 import time
 
 from .controller import Controller
+from .lockscan import LockScanController
 from .swarm import SwarmController
 from .tracking import load_geometry
 
@@ -45,15 +46,18 @@ def main(argv=None):
     parser.add_argument("--nodes", nargs="+", metavar="IP", help="Optional fixed node IPv4 addresses, left to right")
     parser.add_argument("--port", type=int, default=4210, help="Local UDP port; hardware discovery uses 4210")
     parser.add_argument("--record", help="Write timestamped tracking observations to a CSV file")
-    parser.add_argument("--tracker", choices=("swarm", "pairs"), default="swarm",
-                        help="swarm: independent sweeps, leader-follower aiming (default); pairs: paired two-box scheduler")
+    parser.add_argument("--tracker", choices=("swarm", "lock", "pairs"), default="swarm",
+                        help="swarm: independent sweeps, leader-follower aiming (default); "
+                             "lock: search, lock on the first echo, scan a window round it; "
+                             "pairs: paired two-box scheduler")
     args = parser.parse_args(argv)
     if not math.isfinite(args.seconds) or args.seconds <= 0 or not 1 <= args.port <= 65535:
         parser.error("Require positive finite seconds and a port from 1 to 65535")
     controller = None
     logfile = None
     try:
-        controller = (SwarmController if args.tracker == "swarm" else Controller)(
+        trackers = {"swarm": SwarmController, "lock": LockScanController, "pairs": Controller}
+        controller = trackers[args.tracker](
             load_geometry(args.config), simulate=args.simulate, calibration_path=args.calibration,
             port=args.port, node_ips=args.nodes, start_mode=args.start_mode,
             # The desktop hardware window waits for Search/Calibrate; headless and
