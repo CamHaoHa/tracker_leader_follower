@@ -9,6 +9,7 @@ import time
 
 from .controller import Controller
 from .lockscan import LockScanController
+from .sketch import SketchController
 from .swarm import SwarmController
 from .tracking import load_geometry
 
@@ -46,9 +47,11 @@ def main(argv=None):
     parser.add_argument("--nodes", nargs="+", metavar="IP", help="Optional fixed node IPv4 addresses, left to right")
     parser.add_argument("--port", type=int, default=4210, help="Local UDP port; hardware discovery uses 4210")
     parser.add_argument("--record", help="Write timestamped tracking observations to a CSV file")
-    parser.add_argument("--tracker", choices=("swarm", "lock", "pairs"), default="swarm",
+    parser.add_argument("--tracker", choices=("swarm", "sketch", "lock", "pairs"), default="swarm",
                         help="swarm: independent sweeps, leader-follower aiming (default); "
-                             "lock: search, lock on the first echo, scan a window round it; "
+                             "sketch: the boxes run the lock-scan sketch themselves (lock_* firmware), "
+                             "the laptop only draws; "
+                             "lock: laptop-driven search, lock on the first echo, scan a window round it; "
                              "pairs: paired two-box scheduler")
     args = parser.parse_args(argv)
     if not math.isfinite(args.seconds) or args.seconds <= 0 or not 1 <= args.port <= 65535:
@@ -56,7 +59,8 @@ def main(argv=None):
     controller = None
     logfile = None
     try:
-        trackers = {"swarm": SwarmController, "lock": LockScanController, "pairs": Controller}
+        trackers = {"swarm": SwarmController, "sketch": SketchController, "lock": LockScanController,
+                    "pairs": Controller}
         controller = trackers[args.tracker](
             load_geometry(args.config), simulate=args.simulate, calibration_path=args.calibration,
             port=args.port, node_ips=args.nodes, start_mode=args.start_mode,
