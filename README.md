@@ -52,6 +52,27 @@ For diagnostics without a window:
 python3 -m whack --simulate --headless --seconds 5
 ```
 
+### Try the lock-scan tracker
+
+`--tracker lock` runs the search → lock → window-scan algorithm from the
+single-box Arduino sketch (`whack/lockscan.py`), one state machine per box, on
+the same spot display:
+
+```bash
+python3 -m whack --simulate --tracker lock
+python3 -m whack --config config.local.json --tracker lock --nodes IP0 IP1 IP2
+```
+
+Each box sweeps its arc in 3° steps until an echo inside `reliable_range_m`
+locks it, then scans ±15° around the lock in 3° steps, one direction then the
+other. Echoes within 0.25 m of the locked range are hits; a pass ends with the
+lock at the mean hit bearing and a smoothed range. Four empty passes in a row
+send the box back to searching from the lock. The spot fuses every locked box
+(hollow when only one is locked). Press **D** to see each box's beam, its
+window × range acceptance band and its locked point. Tune with
+`lock_step_deg`, `lock_window_deg`, `lock_max_jump_m` and `lock_lost_limit`
+in the config; the empty-room calibration is shared with the swarm tracker.
+
 ## Prepare and upload both ESP32s
 
 The user uploads firmware manually. Preparing the Arduino folders or starting

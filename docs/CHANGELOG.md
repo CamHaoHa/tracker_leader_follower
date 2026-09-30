@@ -1,3 +1,27 @@
+## 2026-09-30 — lock-scan tracker (`--tracker lock`)
+
+- `whack/lockscan.py`: laptop-side port of the single-box search/track
+  sketch. Per box: SEARCH steps 3° across the arc and locks on the first echo
+  inside `reliable_range_m`; TRACK scans ±15° around the lock in 3° steps,
+  alternating direction, counts echoes within 0.25 m of the locked range as
+  hits, re-centres on the mean hit bearing with a 0.7/0.3 smoothed range, and
+  gives up after 4 empty passes (back to SEARCH from the lock). Boxes are
+  independent: nothing aims a box at another box's fix. The spot fuses every
+  locked box with the swarm's least-squares `fuse`; a box's fix counts until
+  it unlocks, not until a timer expires.
+- Settings: `lock_step_deg`, `lock_window_deg`, `lock_max_jump_m`,
+  `lock_lost_limit` (sketch defaults). MAX_RANGE is `reliable_range_m`; the
+  search uses the box's sweep bounds, the window the servo travel.
+- `whack/swarm.py`: freshness hooks (`_expire`, `_fresh_fix`, `_confidence`,
+  `_box_info`) so another tracker can reuse the network, calibration, firing
+  and alert code with its own idea of a fresh fix. Behaviour unchanged.
+- `Snapshot.boxes`: per-box mode/bearing (and lock/window for lock-scan).
+  The diagnostics overlay (D) draws each box's beam (dashed = searching), the
+  window × range band it accepts, and a ring at its locked point.
+- Simulation, 8 s headless: spot on target, 1.2 pass updates/s with two
+  boxes; a pass is 11 pings per box and the acoustic slot is shared, so the
+  spot moves about once a second, not per ping.
+
 ## 2026-09-23 — swarm tracker: no more prediction
 
 - `whack/swarm.py`: the alpha-beta `Motion` filter (velocity + extrapolation) is
