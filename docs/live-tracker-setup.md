@@ -66,14 +66,20 @@ be a 5 V signal. Keep the shared grounds from the bench setup. Supply the servo
 from its rated external supply. The ESP32 3.3 V pin is not a servo power supply.
 A continuous-rotation servo cannot use this positional control scheme.
 
-The default field is 1.50 m wide, with its near edge 0.60 m and far edge 2.00 m
-from the screen wall. The left sensor's acoustic centre is `(0.00, 0.20)` m and
-the right sensor's centre is `(1.50, 0.20)` m. Mount at the same height, aimed
-horizontally toward the torso. Measure your actual layout and record it in a
-config file; positions are metres, not centimetres. The three-box prototype's
-layout is the tracked `config.prototype.json`: sensors at `x = 0`,
-`0.75` and `1.50` on the line `y = 0.50`. `config.local.json` is an optional
-personal override that Git ignores, used with `--config config.local.json`.
+The field is 1.50 m wide, with its near edge 0.60 m and far edge 2.00 m from
+the screen wall. Mount the sensors at the same height, aimed horizontally toward
+the torso. Which sensor line applies depends on the config in use:
+
+- **Three-box prototype** (`--config config.prototype.json`, tracked): three
+  sensors at `x = 0`, `0.75` and `1.50` on the line `y = 0.50` m.
+- **Built-in two-box defaults** (no `--config`): the left sensor's acoustic
+  centre is `(0.00, 0.20)` m and the right sensor's is `(1.50, 0.20)` m.
+
+Measure your actual layout and record it in a config file; positions are metres,
+not centimetres. `config.local.json` is an optional personal override that Git
+ignores, used with `--config config.local.json`.
+
+The diagram shows the built-in two-box defaults:
 
 ```text
                   Screen wall (y = 0)
@@ -253,16 +259,20 @@ before scanning and pass `--config config.local.json` instead.
 python3 -m whack --tracker swarm --config config.prototype.json
 ```
 
-1. Wait for every node to connect.
-2. Clear the entire area, then click **Calibrate empty area (C)**. The servos scan
+1. Wait for every node to connect: press **D** and check that each box reads
+   `Connected <IP>`.
+2. Clear the entire area, then press **C** (button **Calibrate (C)**). The servos scan
    a dense set of bearings and measure the background. Stay out until scanning finishes.
    This background scan is required even while distance-accuracy tests are deferred.
    The dense sweep includes every search bearing and fills gaps to at most the
    configured calibration step (default 3 degrees), with three pairs per step.
    Existing sparse calibration profiles must be recreated for this version.
-3. Stand briefly in the centre. Two consistent foreground range pairs confirm
-   the player before the first spot appears. **Space / R** restarts acquisition;
-   `--start-mode search` starts with a full-field search.
+3. When calibration has finished, the status reads `Calibration saved — press
+   Search to track` and the tracker waits. Press **Space** (button **Search
+   (Space)**) and step into the field: the swarm tracker sweeps every box until
+   one sees the player, then aims the others at that estimate. **P** pauses and
+   resumes. **R** stops and forgets the player; press **Space** to search again.
+   `--start-mode` applies only to the older `--tracker pairs`.
 4. A cyan dot follows the position estimate. A dim hollow spot marks short
    prediction between readings or during a brief echo loss. Prediction expires
    after 0.20 seconds by default. The sensors search locally for up to 0.50

@@ -42,7 +42,10 @@ requires both nodes on WM2 AIM/FIRE firmware and a current background profile.
 The default start mode is `center`; `search` scans the field for initial lock.
 
 - **C:** start empty-field calibration in hardware mode.
-- **Space / R:** find the player again using the selected start mode.
+- **Space:** find the player again (the paired tracker uses the selected start
+  mode).
+- **P:** pause or resume. **R:** stop and forget the player; **Space** searches
+  again.
 - **D:** inspect state, sensor status, confidence, measured update rate and age.
 - **F11:** fullscreen; **Escape:** close.
 

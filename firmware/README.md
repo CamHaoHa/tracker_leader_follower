@@ -129,7 +129,8 @@ unprofiled gaps rather than treating them as free space.
 The laptop starts at the centre by default or scans with `--start-mode search`.
 Two consistent foreground pairs confirm a player. It calculates the forward
 circle intersection, estimates velocity, predicts aiming directions, and uses
-bounded local recovery after missed echoes. **Space/R** restarts acquisition;
+bounded local recovery after missed echoes. **Space** restarts acquisition,
+**R** stops and forgets the player until **Space** is pressed, and
 **D** shows measurement age, update rate and confidence. The single spot is solid
 for measured estimates and hollow/dim for short prediction, then disappears when
 lost or outside the field. There are no game zones. The only sound is the

@@ -45,6 +45,20 @@
   succeeds, a generated `tracker_middle` sketch compiles, the native parser
   test passes, and the Python suite passes (126 tests, run with UDP 4210 free).
   Compiled with Arduino-ESP32 2.0.17 only; the 3.x code paths were not built.
+- Review follow-up, same day. Docs: the controls are described as the window
+  binds them (Space searches, P pauses and resumes, R stops and forgets the
+  player until Space is pressed; "Space / R restarts acquisition" was wrong for
+  both trackers). The live setup guide's scan steps now match the swarm tracker,
+  which waits for Space after calibration. The READMEs say which sensor line
+  belongs to which config: `y = 0.50` for `config.prototype.json`, `y = 0.20`
+  for the built-in two-box defaults. "Run on another computer" names the branch
+  to check out until the work is merged into `main`, adds Windows and macOS
+  notes (written from general knowledge of those systems, not tried on either)
+  and says what to check when the boxes are not found. Tests: the DHCP-change
+  discovery test lost its soft-AP name and addresses. With the `settings.h`
+  guard above and its host-compiler test the Python suite has 128 tests.
+  `README_1.html`, the two-box explainer of 2026-09-23, keeps its run command
+  as a record of that setup.
   Nothing was flashed or run on the boxes.
 
 ## 2026-09-29 — buzzer: review follow-up

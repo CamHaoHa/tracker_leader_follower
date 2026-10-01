@@ -105,8 +105,10 @@ The separate calibration file keeps this layout apart from the original field.
 
 ## 5. Acquire, move slowly and record what happens
 
-Stand briefly on the centre mark `(0.75, 2.55)`. Two consistent pairs are needed
-before the spot appears. Press **Space/R** to restart finding if necessary. First
+When calibration has finished the window waits: press **Space** to start
+finding. Stand briefly on the centre mark `(0.75, 2.55)`. Two consistent pairs
+are needed before the spot appears. Press **Space** again to restart finding if
+necessary; **R** stops and forgets the player until **Space** is pressed. First
 stand still, then walk slowly left/right and forward/back inside the marks.
 
 A solid cyan spot is a recent estimate; a dim hollow spot is short prediction.
