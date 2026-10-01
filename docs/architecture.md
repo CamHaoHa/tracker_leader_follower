@@ -68,8 +68,9 @@ CALIBRATION → FIND → CONFIRM → TRACK
 
 `--start-mode center` initially holds the centre, then allows a wider search if
 acquisition has not succeeded. `--start-mode search` searches immediately. Both
-require two consistent foreground pairs before displaying the target. Space/R
-restarts acquisition; C rebuilds the empty-field profile.
+require two consistent foreground pairs before displaying the target. Space
+restarts acquisition, R stops and forgets the player until Space is pressed, and
+C rebuilds the empty-field profile.
 
 ## Position and motion filter
 

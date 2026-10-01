@@ -24,6 +24,11 @@ positional servo on each. Every box uses the same pins:
 The buzzer sounds while a player is in the dead zone or too close to a box; see
 [the buzzer section of the live setup](docs/live-tracker-setup.md#buzzer).
 
+The title and the built-in defaults describe the original two-box layout. The
+**three-box prototype** adds a middle box (left, middle, right are nodes 0, 1,
+2) and is run with the default swarm tracker and the tracked
+`config.prototype.json`; see [Run on another computer](#run-on-another-computer).
+
 Measure the mounting geometry and calibrate the servo direction, travel and
 loaded settling time before running a sweep.
 
@@ -48,7 +53,9 @@ hidden. There are no extra target dots, collision alarms or game zones.
 | Control | Action |
 | --- | --- |
 | **C** | Calibrate the empty field in hardware mode |
-| **Space / R** | Restart player acquisition using the selected start mode |
+| **Space** | Search: start or restart finding the player |
+| **P** | Pause / resume |
+| **R** | Reset: stop and forget the player (press **Space** to search again) |
 | **D** | Show sensor status, fix age, confidence and fresh measurement rate |
 | **F11** | Toggle fullscreen |
 | **Escape** | Close |
@@ -120,21 +127,41 @@ python3 -m whack --tracker swarm --config config.prototype.json --nodes LEFT_IP 
 The boxes keep their firmware; only the laptop changes. The field setup of the
 three-box prototype travels with the repository in `config.prototype.json`.
 
-1. Clone this repository.
-2. Install **Python 3.10 or newer with tkinter**. On Debian/Ubuntu:
-   `sudo apt install python3-tk`. The tracker needs no pip packages.
+1. Clone this repository and check out the branch that holds
+   `config.prototype.json`. Until that work is merged into `main`, run
+   `git checkout leader-follower-tracking-2` after cloning.
+2. Install **Python 3.10 or newer with tkinter**. The tracker needs no pip
+   packages.
+   - Debian/Ubuntu: `sudo apt install python3-tk`.
+   - Windows: the python.org installer includes tkinter. Start Python as `py`
+     (or `python`) instead of `python3`.
+   - macOS: the python.org installer includes tkinter. A Homebrew Python needs
+     `brew install python-tk`.
 3. Join the **same phone hotspot** as the boxes.
-4. Allow **incoming UDP 4210** in the firewall (with ufw:
-   `sudo ufw allow 4210/udp`). The boxes announce themselves on that port.
-5. From the project root, run:
+4. Allow **incoming UDP 4210** in the firewall. The boxes announce themselves
+   on that port.
+   - Linux with ufw: `sudo ufw allow 4210/udp`.
+   - Windows: on the first run, accept the Windows Defender Firewall prompt
+     for Python and tick the network type the hotspot is listed as (tick both
+     private and public if unsure).
+   - macOS: if the firewall is on, allow incoming connections for Python when
+     the system asks.
+5. From the project root, run (`py -m whack ...` on Windows):
 
    ```bash
    python3 -m whack --tracker swarm --config config.prototype.json
    ```
 
-6. Press **C** once with the field empty. The empty-field calibration is stored
+6. Press **D**. Within a few seconds every box should read `Connected <IP>`.
+7. Press **C** once with the field empty. The empty-field calibration is stored
    per computer in `calibration.local.json`, which Git ignores, so a new
    computer has none. Then press **Space** to start tracking.
+
+If a box stays `offline` under **D**, or the status stays at `Waiting for
+sensors: n of 3 online` after **Space**, its announcements are not reaching the
+laptop. Check that the laptop is on the hotspot and that the firewall lets UDP
+4210 in, or pass `--nodes` as shown in
+[Network: one phone hotspot](#network-one-phone-hotspot).
 
 `config.local.json` is an optional personal override that Git ignores. Use it
 for a different layout with `--config config.local.json`; start it as a copy of
@@ -142,14 +169,16 @@ for a different layout with `--config config.local.json`; start it as a copy of
 
 ## Start a real tracking session
 
-1. Mount both sensors at the same torso height and depth with horizontal beams.
-   Default acoustic centres are `(0, 0.20)` and `(1.50, 0.20)` metres. The default
-   field runs from `x=0` to `1.50` and `y=0.60` to `2.00`, with the wall at `y=0`.
-2. The three-box prototype uses the tracked `config.prototype.json`: sensors at
-   `x = 0`, `0.75` and `1.50` on the line `y = 0.50`. For a different layout,
-   copy `config.example.json` to `config.local.json` (ignored by Git), enter the
-   actual geometry, range corrections and tracking limits, and pass
-   `--config config.local.json` instead.
+1. Mount the sensors at the same torso height and depth with horizontal beams.
+   The three-box prototype mounts all three on the line `y = 0.50` metres, at
+   `x = 0`, `0.75` and `1.50`, as in the tracked `config.prototype.json`. The
+   acoustic centres `(0, 0.20)` and `(1.50, 0.20)` are the built-in two-box
+   defaults, used only when no `--config` is given. In both, the field runs
+   from `x=0` to `1.50` and `y=0.60` to `2.00`, with the wall at `y=0`.
+2. For a different layout, copy `config.example.json` to `config.local.json`
+   (ignored by Git), enter the actual geometry, range corrections and tracking
+   limits, and pass `--config config.local.json` instead of
+   `--config config.prototype.json`.
 3. Join the phone hotspot on the laptop. The laptop receives on UDP 4210 and the
    boards on UDP 4211.
 4. Start the visualizer:
