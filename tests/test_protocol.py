@@ -1,5 +1,5 @@
 import unittest
-from whack.protocol import Hello, Range, Ready, aim, fire, measure, parse
+from whack.protocol import Hello, Range, Ready, aim, buzz, fire, measure, parse
 
 
 class ProtocolTests(unittest.TestCase):
@@ -42,6 +42,18 @@ class ProtocolTests(unittest.TestCase):
         for angle in (-1, 180001, 90.0, False):
             with self.subTest(angle=angle), self.assertRaises(ValueError):
                 aim(1, angle)
+
+    def test_buzz_duration_is_a_bounded_integer(self):
+        self.assertEqual(buzz(400), b"WM2 BUZZ 400")
+        self.assertEqual(buzz(0), b"WM2 BUZZ 0")          # silence at once
+        self.assertEqual(buzz(2000), b"WM2 BUZZ 2000")    # the firmware's limit
+        for duration in (-1, 2001, 4294967296, 400.0, "400", None, True, False):
+            with self.subTest(duration=duration), self.assertRaises(ValueError):
+                buzz(duration)
+
+    def test_buzz_is_a_command_not_a_message_from_a_box(self):
+        with self.assertRaises(ValueError):
+            parse(buzz(400))
 
 
 if __name__ == "__main__":

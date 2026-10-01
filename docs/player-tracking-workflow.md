@@ -3,8 +3,8 @@
 Status: implemented workflow for software validation, 15 September 2026.
 Physical moving-player tracking, accuracy and latency remain unverified.
 Gameplay is outside this stage; the output is one cyan spot on a black screen.
-Home and school network profiles are retained, OneNet troubleshooting is deferred,
-and firmware uploads are performed manually by the user.
+The laptop and the boxes share one phone hotspot, and firmware uploads are
+performed manually by the user.
 
 ## Hardware and coordinates
 
@@ -32,12 +32,20 @@ python3 -m whack --config config.local.json
 python3 -m whack --config config.local.json --start-mode search
 ```
 
+`config.local.json` is a personal layout file that Git ignores. The three-box
+prototype has a tracked one and is started with
+`python3 -m whack --tracker swarm --config config.prototype.json`; see
+[Run on another computer](../README.md#run-on-another-computer).
+
 In simulation, wait for centre acquisition before moving the mouse. Hardware
 requires both nodes on WM2 AIM/FIRE firmware and a current background profile.
 The default start mode is `center`; `search` scans the field for initial lock.
 
 - **C:** start empty-field calibration in hardware mode.
-- **Space / R:** find the player again using the selected start mode.
+- **Space:** find the player again (the paired tracker uses the selected start
+  mode).
+- **P:** pause or resume. **R:** stop and forget the player; **Space** searches
+  again.
 - **D:** inspect state, sensor status, confidence, measured update rate and age.
 - **F11:** fullscreen; **Escape:** close.
 
@@ -235,18 +243,17 @@ Before reporting latency or accuracy, test both real units together:
 No hardware tracking rate or latency is claimed. A person moving at `2 m/s`
 travels `0.40 m` in `0.20 s`; a smooth display alone cannot remove that uncertainty.
 
-## Home and school operation
+## Network
 
-Keep the home credentials and separate school settings in the local firmware
-configuration. Profile `0` selects home, `1` a school personal network/hotspot,
-`2` the optional OneNet enterprise mode, and `3` the left ESP32's TrackerNet
-access point. Prepare the latter with `python3 -m tools.prepare_tracker_firmware --network tracker`:
-left creates the network at `192.168.4.1`; right and laptop receive DHCP addresses.
-The laptop remains the tracking controller. Both boards and the laptop need a
-network that permits local UDP; internet connectivity is unnecessary. OneNet
-enterprise login and campus UDP reliability remain a separate deferred test.
+The laptop and every box join one phone hotspot (WPA2-personal, 2.4 GHz). It is
+the only supported network: the firmware has no network profiles and no board
+acts as an access point. The hotspot name and password are `WIFI_SSID` and
+`WIFI_PASSWORD` in the local firmware configuration. Every box broadcasts
+`WM2 HELLO` to UDP 4210 every two seconds, the laptop discovers the boxes from
+those announcements, and the boxes receive commands on UDP 4211. The laptop
+remains the tracking controller.
 
-The user prepares settings and manually uploads the matching left/right sketches.
+The user prepares settings and manually uploads the matching sketch to each box.
 The workflow never automatically flashes boards. See the
 [live setup guide](live-tracker-setup.md) and [firmware setup](../firmware/README.md).
 

@@ -1,11 +1,12 @@
 #include <Arduino.h>
 
 // Standalone HC-SR04 bench test for a classic ESP32.
-// TRIG -> GPIO32; ECHO -> voltage divider -> GPIO35.
-// Sensor requires regulated 5 V and a common ground with the ESP32.
+// TRIG -> GPIO32; ECHO -> GPIO34, wired directly.
+// Sensor VCC -> 3V3 (ECHO is then a 3.3 V signal, so there is no divider) and a
+// common ground with the ESP32. GPIO34 is input-only, no internal pull resistors.
 // Disconnect servo power for this test; this sketch does not drive a servo.
 constexpr uint8_t TRIG_PIN = 32;
-constexpr uint8_t ECHO_PIN = 35;
+constexpr uint8_t ECHO_PIN = 34;
 constexpr unsigned long ECHO_TIMEOUT_US = 30000;
 // Bench-test acceptance limits, not the full playing-area geometry.
 // Default project placement needs about 234 cm to reach the opposite far corner.
@@ -18,14 +19,14 @@ void setup() {
   digitalWrite(TRIG_PIN, LOW);
   pinMode(ECHO_PIN, INPUT);
   delay(1000);
-  Serial.println("HC-SR04 test: TRIG=32, ECHO=35, units=cm");
+  Serial.println("HC-SR04 test: TRIG=32, ECHO=34, units=cm");
   Serial.println("Accepted range: 2-200 cm. Other distances report OUT OF RANGE.");
   Serial.println("Point at a flat target about 20-50 cm away.");
 }
 
 void loop() {
   if (digitalRead(ECHO_PIN) == HIGH) {
-    Serial.println("ECHO already HIGH: check wiring and divider.");
+    Serial.println("ECHO already HIGH: check ECHO wiring, sensor power and ground.");
     delay(500);
     return;
   }

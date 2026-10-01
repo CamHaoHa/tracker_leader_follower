@@ -1,26 +1,25 @@
 # Sensor tools
 
-## Prepare the left-hosted tracker network
+## Prepare the Arduino IDE sketches
 
 ```bash
-python3 -m tools.prepare_tracker_firmware --network tracker
+python3 -m tools.prepare_tracker_firmware
 ```
 
-This prepares matching left/right Arduino sketches for **TrackerNet**. It saves
-one shared random password in the ignored `firmware/arduino/tracker_network.local.json`
-and copies the network selection into each sketch's `tracker_network.h` tab.
-That tab shows the password to enter on the laptop. To change SSID, password or
-channel, edit the JSON and run the same preparation command again.
+This writes one Arduino sketch folder per box position under
+`firmware/arduino/`: `tracker_left`, `tracker_middle`, `tracker_right` and
+`tracker_right_pair`. Each holds a copy of the maintained firmware and a private
+`tracker_config.h`. Enter the phone hotspot's name and password there as
+`WIFI_SSID` and `WIFI_PASSWORD`; the hotspot is the one supported network, so
+there is no network option.
 
-Your original `tracker_config.h` credentials and servo settings are preserved.
-A normal preparation without `--network` preserves the network selection;
-`--network configured` restores the profile selected in `tracker_config.h`.
-Upload both sketches manually after any change. The generator never connects
-to or flashes either board. Use `--check --network tracker` to check files without
-creating credentials or changing settings.
+Running the command again refreshes the firmware copies and never overwrites an
+existing `tracker_config.h`. Upload the sketches manually after any change. The
+generator never connects to or flashes a board. Use `--check` to see whether the
+generated files are current without writing anything.
 
-See [live setup](../docs/live-tracker-setup.md) for joining the Wi-Fi and running
-the spot display.
+See [live setup](../docs/live-tracker-setup.md) for joining the hotspot and
+running the spot display.
 
 ## Record a real sensor test to Excel
 

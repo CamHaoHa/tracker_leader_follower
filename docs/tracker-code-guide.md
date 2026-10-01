@@ -54,7 +54,8 @@ Default `center` mode tries the centre first, then expands the search if needed.
 `search` mode starts searching immediately. The first accepted pair initializes
 position with **zero velocity**. The controller requires **two consistent pairs**
 before displaying a confirmed track; the next pair begins informing velocity.
-Space/R restarts acquisition. C starts hardware background calibration.
+Space restarts acquisition. R stops and forgets the player until Space is
+pressed. C starts hardware background calibration.
 
 ## 3. Calculate the first position
 

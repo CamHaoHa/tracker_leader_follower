@@ -14,103 +14,76 @@ The user's hardware is a Freenove ESP32-WROOM-32E board and HC-SR04 sensor per u
 
 | Signal | ESP32 connection |
 | --- | --- |
-| Servo control | GPIO25 |
+| Servo control | GPIO33 |
 | Ultrasonic TRIG | GPIO32 |
-| Ultrasonic ECHO | GPIO35, **through a 5 V to 3.3 V level shifter/divider** |
+| Ultrasonic ECHO | GPIO34, **wired directly** (sensor powered from 3V3) |
 | Ultrasonic ground | ESP32 ground |
 | Servo ground | ESP32 ground and external supply ground |
 | Servo power | Separate regulated supply rated for the servo voltage and stall current |
-| HC-SR04 supply | Regulated 5 V, according to the sensor's specification |
+| HC-SR04 supply | ESP32 3V3 |
+| Buzzer, **middle box only** | Buzzer + to GPIO25, buzzer − to ESP32 ground |
 
 Keep a common ground within each unit. Do not power a servo from ESP32 3V3 or GPIO pins. A suitable external servo supply avoids regulator overload and Wi-Fi brownouts. During USB programming, avoid connecting another source to the board's 5 V input unless the exact board supports that arrangement; the separately powered servo still needs a shared ground.
 
-Treat ECHO as 5 V unless your exact sensor explicitly provides a 3.3 V-safe output. For a nominal 5 V ECHO, a divider can use **2.2 kΩ from ECHO to GPIO35 and 3.3 kΩ from GPIO35 to ground**, producing approximately 3.0 V. Confirm its output against your sensor and supply voltage. The ESP32 uses 3.3 V logic; see [Espressif's electrical specifications](https://documentation.espressif.com/esp32_datasheet_en.pdf). If the sensor does not accept a 3.3 V TRIG input, add a suitable level shifter in that direction too.
+The sensor is powered from the ESP32's 3V3 pin, so its ECHO output is a 3.3 V signal and goes to GPIO34 directly: there is no divider. **Do not move the sensor supply to 5 V while ECHO is wired directly.** A 5 V ECHO needs a divider or level shifter again, for example 2.2 kΩ from ECHO to the GPIO and 3.3 kΩ from the GPIO to ground (approximately 3.0 V). The ESP32 uses 3.3 V logic; see [Espressif's electrical specifications](https://documentation.espressif.com/esp32_datasheet_en.pdf). The classic HC-SR04 is specified for 5 V and only the 3–5.5 V revisions range reliably on 3V3, so check every sensor with `arduino/bench_test` before mounting it.
 
-On classic ESP32 boards, GPIO32 supports the trigger output and GPIO35 is input-only, suitable for ECHO. GPIO25/32/35 have no boot strapping restriction in [Espressif's GPIO table](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html). Check the silkscreen's **GPIO numbers**, not header positions.
+On classic ESP32 boards, GPIO32 and GPIO33 support output (trigger and servo signal). GPIO34 is input-only and has no internal pull-up or pull-down resistor, which suits ECHO: the sensor drives that line both ways. GPIO32/33/34 have no boot strapping restriction in [Espressif's GPIO table](https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html). Check the silkscreen's **GPIO numbers**, not header positions.
+
+These are the firmware defaults (`include/settings.h`). A local `config.local.h` or a generated `tracker_config.h` overrides them and is never rewritten by the tools: a file written for the old map (servo GPIO25, ECHO GPIO35) must have its three pin lines changed by hand.
 
 ## Configure and flash
 
-For Arduino IDE, run
-`python3 -m tools.prepare_tracker_firmware --network tracker` from the project
-root to prepare both boards for TrackerNet. Open
-the sketch named after each box's position (`tracker_left`, `tracker_middle`,
-`tracker_right`, or `tracker_right_pair` for a two-box right box), check that sketch's
-`tracker_config.h` for per-servo calibration, select **ESP32
-Dev Module**, and upload to the matching board. The folders are generated from
-the maintained firmware, and regeneration preserves each local config file.
+For Arduino IDE, run `python3 -m tools.prepare_tracker_firmware` from the project
+root. Open the sketch named after each box's position (`tracker_left`,
+`tracker_middle`, `tracker_right`, or `tracker_right_pair` for a two-box right
+box). In that sketch's `tracker_config.h`, enter the phone hotspot as
+`WIFI_SSID` and `WIFI_PASSWORD` and check the per-servo calibration. Select
+**ESP32 Dev Module** and upload to the matching board. The folders are generated
+from the maintained firmware, and regeneration preserves each local config file.
 The preparation command only writes sketch files; it does not flash a board.
-Both units must receive the updated WM2 tracking firmware. The prior WM1 tracker,
-USB sensor sketch and standalone OneNet tests do not implement this workflow.
+Every unit must receive the current WM2 tracking firmware. The prior WM1 tracker
+and the USB sensor sketch do not implement this workflow.
 See [live setup](../docs/live-tracker-setup.md) for the complete sequence.
 
-### TrackerNet: Wi-Fi provided by the left board
+### Wi-Fi: the phone hotspot
 
-Profile **3** makes node 0 a Wi-Fi access point (SoftAP). It creates the
-WPA2-protected **TrackerNet** network at `192.168.4.1` with subnet mask
-`255.255.255.0`. Node 1 joins automatically using the same generated credentials.
-The laptop joins through its normal Wi-Fi settings.
+The firmware joins exactly one network as an ordinary WPA2-personal station:
+the phone hotspot named by `WIFI_SSID` and `WIFI_PASSWORD` in `tracker_config.h`
+(Arduino) or `config.local.h` (PlatformIO). The laptop joins the same hotspot.
+There are no network profiles and no board acts as an access point.
 
-The preparation command creates a shared random private password in
-`tracker_network.h` in each generated sketch folder. Open that tab in Arduino
-IDE to read the password for the laptop. Both matching sketches must be manually
-uploaded before using this mode. Keep the network header local; it is not a
-published example password.
+- The ESP32 radio is **2.4 GHz only**. On an iPhone turn on **Maximise
+  Compatibility** and keep the Personal Hotspot screen open while the boxes join.
+- An iPhone's default hotspot name contains a typographic apostrophe (U+2019).
+  Write it as the UTF-8 bytes `\xE2\x80\x99` inside the C string, for example
+  `"Sam\xE2\x80\x99s iPhone"`. A name longer than 32 bytes fails the build.
+- At boot each board prints `Wi-Fi: will join "<name>" (phone hotspot, 2.4 GHz)`.
+  The password is never printed.
+- While it is not connected, the board prints `Joining Wi-Fi "<name>"` and tries
+  again every 10 s. A lost connection cancels pending commands.
+- Once connected it prints `Node n ready at <IP>:4211 (WM2 AIM/FIRE)` and
+  broadcasts `WM2 HELLO n` to UDP 4210 every two seconds. That is how the laptop
+  finds the boxes; no IP address is configured on either side.
 
-Boot the left board first, then the right. On the laptop select **TrackerNet**,
-enter the generated password and stay connected if warned that the network has
-no internet. The laptop and right board use DHCP; the right board is not assigned
-a guaranteed `192.168.4.2`. Read its actual address in Serial Monitor at 115200
-baud if needed.
+A private config written before 2026-10-01 may still set `WIFI_PROFILE`,
+`SCHOOL_WIFI_*`, `ONENET_*` or `TRACKER_WIFI_*`. The build then stops with
+`Network profiles were removed: ...` instead of joining the wrong network: move
+the hotspot name and password into `WIFI_SSID` and `WIFI_PASSWORD` by hand and
+delete those lines. A `tracker_network.h` tab left in an older generated sketch
+folder is no longer used and can be deleted.
 
-Run the visualizer with normal discovery:
-
-```bash
-python3 -m whack --config config.local.json
-```
-
-If discovery fails, replace `ACTUAL_RIGHT_IP` with the right board's serial IP:
-
-```bash
-python3 -m whack --config config.local.json --nodes 192.168.4.1 ACTUAL_RIGHT_IP
-```
-
-The local network supplies tracker communication without internet. Its stability
-with both physical boards still needs testing. Servo and tracking behavior are
-the same across network profiles.
-
-### Retained home and school profiles
-
-Keep credentials local in `tracker_config.h` (Arduino) or `config.local.h`
-(PlatformIO). Select one profile without deleting the others:
-
-| Setting | Use |
-| --- | --- |
-| `WIFI_PROFILE 0` | Home: `WIFI_SSID`, `WIFI_PASSWORD` |
-| `WIFI_PROFILE 1` | School local network/hotspot: `SCHOOL_WIFI_SSID`, `SCHOOL_WIFI_PASSWORD` |
-| `WIFI_PROFILE 2` | Optional OneNet PEAP: `ONENET_USERNAME`, `ONENET_PASSWORD` |
-| `WIFI_PROFILE 3` | Left-board TrackerNet access point; right board and laptop join |
-
-The laptop and both boards need a network allowing local UDP communication.
-Internet access is unnecessary. Change the selected profile and manually upload
-again when switching networks. The generated `tracker_network.h` selects profile
-3 without altering the home/school settings in `tracker_config.h`. Regeneration
-without `--network` preserves that selection. To remove the generated override
-and use each existing config's selected profile:
+Run the three-box prototype with normal discovery:
 
 ```bash
-python3 -m tools.prepare_tracker_firmware --network configured
+python3 -m whack --tracker swarm --config config.prototype.json
 ```
 
-Manually upload both sketches after changing mode. Older local config files are
-preserved; add missing profile fields from the example when upgrading them.
+`--nodes` is an optional override for a network that blocks broadcast. Give the
+addresses from Serial Monitor, left to right:
 
-The OneNet path uses certificate validation and the configured server domain
-(`radius.mq.edu.au` by default). It requires Arduino-ESP32 **3.3+** with its CA
-bundle and EAP domain-check APIs. Certificate time is seeded from the build
-stamp using `ONENET_BUILD_TIMEZONE`; rebuild before testing or provide a trusted
-clock. The older PlatformIO core below rejects this profile at compile time.
-OneNet login reliability and tracker UDP access remain unverified and deferred.
-Profiles 0, 1 and 3 support the current local tracking workflow.
+```bash
+python3 -m whack --tracker swarm --config config.prototype.json --nodes LEFT_IP MIDDLE_IP RIGHT_IP
+```
 
 ### PlatformIO alternative
 
@@ -121,7 +94,7 @@ Install PlatformIO Core or its VS Code extension, then run from this directory:
 
 ```bash
 cp include/config.example.h include/config.local.h
-# Edit config.local.h: Wi-Fi credentials and per-node calibration.
+# Edit config.local.h: the phone hotspot's name and password, and per-node calibration.
 pio run
 pio run -e node_left   -t upload --upload-port /dev/ttyUSB0   # node 0
 pio run -e node_middle -t upload --upload-port /dev/ttyUSB1   # node 1
@@ -130,7 +103,7 @@ pio run -e node_right  -t upload --upload-port /dev/ttyUSB2   # node 2
 pio device monitor --port /dev/ttyUSB0 --baud 115200
 ```
 
-Choose the actual ports on your machine. `config.local.h` is gitignored. Builds also work without that file, but the firmware then reports missing credentials over USB and does not connect. Credentials are stored in the flashed image; this is intended for a local project network.
+Choose the actual ports on your machine. `config.local.h` is gitignored. Builds also work without that file, but the firmware then reports missing credentials over USB and does not connect. Credentials are stored in the flashed image; this is intended for the project's phone hotspot.
 
 PlatformIO remains pinned to `espressif32@7.0.1`, whose [official release lists Arduino 2.0.17](https://github.com/platformio/platform-espressif32/releases/tag/v7.0.1). The firmware selects the appropriate servo PWM API for Arduino ESP32 2.x or 3.x. Arduino 3 uses [LEDC channel attachment and writes](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/ledc.html); no external servo library is needed.
 
@@ -156,10 +129,13 @@ unprofiled gaps rather than treating them as free space.
 The laptop starts at the centre by default or scans with `--start-mode search`.
 Two consistent foreground pairs confirm a player. It calculates the forward
 circle intersection, estimates velocity, predicts aiming directions, and uses
-bounded local recovery after missed echoes. **Space/R** restarts acquisition;
+bounded local recovery after missed echoes. **Space** restarts acquisition,
+**R** stops and forgets the player until **Space** is pressed, and
 **D** shows measurement age, update rate and confidence. The single spot is solid
 for measured estimates and hollow/dim for short prediction, then disappears when
-lost or outside the field. There are no game zones or warning sounds.
+lost or outside the field. There are no game zones. The only sound is the
+middle box's buzzer, which the default swarm tracker sounds during a near-wall
+alert (see [Buzzer](#buzzer)).
 
 See [the full workflow](../docs/player-tracking-workflow.md). Servo directions,
 human echoes and actual delay must still be tested with the two physical units.
@@ -185,6 +161,36 @@ claim control ownership, change sequence ordering or alter firing permissions.
 The laptop requires a fresh compatible node identity; protocol freshness expires
 after six seconds. Knowing a configured IP does not establish that the board is
 online or still running WM2 firmware.
+
+### Buzzer
+
+A box built with `BUZZER_PIN` sounds its buzzer on request. Only the middle box
+(node 1) has one, on GPIO25; `BUZZER_PIN` defaults to `-1`, no buzzer.
+
+```text
+WM2 BUZZ 400
+```
+
+The single field is a duration of 0..2000 ms. The buzzer sounds until that long
+after receipt. Every new BUZZ replaces the deadline, and `WM2 BUZZ 0` silences
+at once. The board silences itself when the deadline passes: the laptop repeats
+the command while the sound should continue, so a laptop that stops or leaves
+the network cannot leave the buzzer on for more than 2 s.
+
+BUZZ must come from the laptop's UDP 4210. It has no sequence number and no
+reply. Like DISCOVER it claims no control ownership and leaves aims, firing
+leases and ping spacing alone. A box without a buzzer ignores it.
+
+`BUZZER_TONE_HZ` (default 2000) is the square wave for a passive buzzer: LEDC
+channel 2, 10-bit, 50 % duty while sounding and duty 0 when silent. The servo
+keeps channel 0 and its own 50 Hz timer. Set `BUZZER_TONE_HZ 0` for an active
+buzzer; the pin is then held HIGH while sounding. With `#if NODE_ID == 1` the
+`node_right_pair` build (node 1 of a two-box layout) drives GPIO25 as well.
+The generated Arduino sketches differ there: only `tracker_middle` is created
+with `BUZZER_PIN`, and `tracker_right_pair` has none unless it is added to its
+`tracker_config.h`. `BUZZER_PIN` may not be GPIO1 or GPIO3 (serial), GPIO6..11
+(flash), GPIO34..39 (input-only) or a pin the servo or sensor uses; the build
+fails if it is.
 
 ### Aim both, fire one at a time
 
@@ -274,8 +280,9 @@ g++ -std=c++11 -Wall -Wextra -Werror -Ifirmware/include firmware/test/protocol_t
 /tmp/whack-firmware-protocol-test
 ```
 
-Native tests cover malformed/overflowed inputs, discovery, sequence wraparound,
-lease consumption/expiry, reversed mounting, trim and travel-limit rejection.
+Native tests cover malformed/overflowed inputs, discovery, buzzer durations and
+the buzzer deadline, sequence wraparound, lease consumption/expiry, reversed
+mounting, trim and travel-limit rejection.
 Python simulation and loopback tests cover coordination and synthetic tracking.
 These checks do not exercise actual servo motion, radio transport or human
 ultrasonic reflections. No measured tracking rate or latency is claimed.

@@ -41,6 +41,17 @@ class IndependentSimulatorTests(unittest.TestCase):
         self.sim.nodes[node].sock.outbox.clear()
         return result
 
+    def test_buzz_is_accepted_silently_and_leaves_the_aim_alone(self):
+        self.send(0, b"WM2 AIM 1 60000", 0)
+        self.send(0, b"WM2 BUZZ 400", .05)
+        self.sim.tick(.2)
+        self.assertEqual(self.replies(0), [Ready(0, 1, 60000, 1000, "OK")])
+        self.send(0, b"WM2 BUZZ 0", .25)
+        self.assertEqual(self.replies(0), [])
+        self.assertEqual(self.sim.malformed_commands, 0)
+        self.send(0, b"WM2 FIRE 1", .3)
+        self.assertEqual(self.sim.pings, [1, 0])
+
     def test_aim_does_not_ping_and_expired_grant_cannot_be_reactivated(self):
         self.send(0, b"WM2 AIM 1 60000", 0)
         self.send(1, b"WM2 AIM 2 120000", 0)

@@ -1,3 +1,122 @@
+## 2026-10-01 — prototype config in the repository, phone hotspot only
+
+- Config: `config.prototype.json` is the tracked field setup of the three-box
+  prototype: sensors at x 0, 0.75 and 1.50 m on the line y 0.50 m, servo travel
+  0..180 degrees, buzzer on node 1. Until now it existed only in the Git-ignored
+  `config.local.json`, so a fresh clone on another computer could not run the
+  prototype. `config.local.json` remains an optional personal override, used
+  with `--config config.local.json`. Without `--config` the CLI still uses the
+  built-in two-box defaults.
+- Run command for the three-box prototype:
+  `python3 -m whack --tracker swarm --config config.prototype.json`, with no
+  `--nodes`. The boxes announce themselves with `WM2 HELLO` and are discovered;
+  `--nodes` stays as an optional override for a network that blocks broadcast.
+- README: new section "Run on another computer" (Python 3.10+ with tkinter, no
+  pip packages, same hotspot, incoming UDP 4210, calibrate once per computer).
+- Firmware: one network, the phone hotspot, joined as an ordinary WPA2-personal
+  station with `WIFI_SSID` / `WIFI_PASSWORD`. Removed `WIFI_PROFILE` and its four
+  profiles, `SCHOOL_WIFI_*`, `ONENET_*` and `TRACKER_WIFI_*`, the WPA2-Enterprise
+  (PEAP) code with its certificate clock, the TrackerNet access point that node 0
+  ran, and every node 0 networking special case. The reconnect attempt every
+  10 s is unchanged. The boot banner prints the network name it will join, never
+  the password. An empty `WIFI_SSID` still builds, reports missing credentials
+  over USB and never connects. A name longer than 32 bytes fails the build.
+- Private configs are not migrated automatically. An existing `config.local.h`
+  or `tracker_config.h` that selected a profile must have its hotspot name and
+  password moved into `WIFI_SSID` / `WIFI_PASSWORD` by hand. `settings.h`
+  refuses to build while any removed name (`WIFI_PROFILE`, `SCHOOL_WIFI_*`,
+  `TRACKER_WIFI_*`, `ONENET_*`) is still defined and names the fix, so an old
+  config cannot silently join the network left in `WIFI_SSID`.
+- Tools: `tools/prepare_tracker_firmware.py` lost `--network`, the generated
+  `tracker_network.h` and `tracker_network.local.json`; its `tracker_config.h`
+  template has the single Wi-Fi block. It still never overwrites an existing
+  `tracker_config.h`. `tools/probe_network.py`, which existed only for the
+  deferred OneNet UDP check, is deleted.
+- `.gitignore` keeps its entries for `tracker_network.local.json` and the
+  `onenet_*` sketch folders: nothing creates them now, but old copies on disk
+  contain passwords.
+- Docs: the OneNet and university-network sections, TrackerNet and the profile
+  table are removed from the READMEs and guides, which now describe the one
+  supported network. The earlier entries below and the bench logs keep the
+  record of the removed setups.
+- Checked without hardware: the four firmware environments build (flash use of
+  `node_left` 745797 bytes before and 745821 after, same private config; the
+  other profiles were already compiled out), a build without `config.local.h`
+  succeeds, a generated `tracker_middle` sketch compiles, the native parser
+  test passes, and the Python suite passes (126 tests, run with UDP 4210 free).
+  Compiled with Arduino-ESP32 2.0.17 only; the 3.x code paths were not built.
+- Review follow-up, same day. Docs: the controls are described as the window
+  binds them (Space searches, P pauses and resumes, R stops and forgets the
+  player until Space is pressed; "Space / R restarts acquisition" was wrong for
+  both trackers). The live setup guide's scan steps now match the swarm tracker,
+  which waits for Space after calibration. The READMEs say which sensor line
+  belongs to which config: `y = 0.50` for `config.prototype.json`, `y = 0.20`
+  for the built-in two-box defaults. "Run on another computer" names the branch
+  to check out until the work is merged into `main`, adds Windows and macOS
+  notes (written from general knowledge of those systems, not tried on either)
+  and says what to check when the boxes are not found. Tests: the DHCP-change
+  discovery test lost its soft-AP name and addresses. With the `settings.h`
+  guard above and its host-compiler test the Python suite has 128 tests.
+  `README_1.html`, the two-box explainer of 2026-09-23, keeps its run command
+  as a record of that setup.
+  Nothing was flashed or run on the boxes.
+
+## 2026-09-29 — buzzer: review follow-up
+
+- Swarm: a "Player too close to box n" report is dropped when that box is
+  offline or has reported nothing for 1.5 s, and on pause. Before, only a later
+  reading from the same box withdrew it, so a box that went offline left the
+  alert up and the buzzer sounding for as long as the tracker ran. Resume no
+  longer sounds for a player who stepped back during the pause.
+- Swarm: a BUZZ that fails to send is tried again after 0.2 s, not on every
+  poll.
+- Firmware: `BUZZER_PIN` on GPIO1, GPIO3 (serial) or GPIO6..11 (flash) fails
+  the build. Pin 25 is unaffected.
+- Tools: `python3 -m tools.probe_node ... --buzz` sounds the buzzer during the
+  pings, for the bench check in the buzzer section of
+  `docs/live-tracker-setup.md`.
+- Docs: a box that prints no `Buzzer:` line at boot runs firmware from before
+  the buzzer and ignores `WM2 BUZZ`. In a two-box layout the PlatformIO
+  `node_right_pair` build drives GPIO25 and the generated `tracker_right_pair`
+  sketch does not.
+- Checked without hardware: the four firmware environments build, the native
+  parser test passes, and the Python suite passes (125 tests, run with UDP 4210
+  free). Not yet checked on the boxes: the buzzer itself, and whether its sound
+  changes the middle box's ranges.
+
+## 2026-09-29 — one pin map for every box, buzzer on the middle box
+
+- Pins: servo GPIO33, TRIG GPIO32 and ECHO GPIO34 on every box (were servo
+  GPIO25 and ECHO GPIO35). The sensors are powered from 3V3 and ECHO is wired
+  directly; the divider is gone. GPIO34 is input-only and has no internal pull
+  resistors. Changed in the `settings.h` defaults, `config.example.h`, the
+  `tracker_config.h` template of `tools/prepare_tracker_firmware.py`, the
+  `bench_test` and `sensor_test` sketches, the boot banner and the wiring
+  sections of the READMEs and setup guides. An existing `config.local.h` or
+  `tracker_config.h` keeps its own pins until it is edited by hand.
+- Firmware: optional buzzer. `BUZZER_PIN` defaults to -1 (none) and is 25 for
+  node 1 in `config.example.h`. `BUZZER_TONE_HZ` 2000 is a square wave for a
+  passive buzzer on LEDC channel 2 (10-bit, 50 % duty, duty 0 when silent); 0
+  holds the pin HIGH for an active buzzer. A buzzer pin that is input-only or
+  shared with the servo, trigger or echo fails the build.
+- Protocol: `WM2 BUZZ <duration_ms>`, 0..2000, from the host port only. No
+  sequence, no reply, no ownership, and no effect on aims or firing leases.
+  The box sounds until receipt + duration, each BUZZ replaces the deadline, 0
+  silences at once, and the box silences itself at the deadline. A box without
+  a buzzer ignores it.
+- Laptop: `protocol.buzz()`, `Geometry.buzzer_node` (-1 = none; not a layout
+  field, so saved calibrations stay valid). The swarm tracker sends `BUZZ 400`
+  every 0.2 s while the alert is "Player in the dead zone" or "Player too close
+  to box n", and `BUZZ 0` once when that ends, on pause, reset, calibration
+  start or close. Other alerts are silent. The paired tracker is unchanged.
+- Simulators: `SimulatedTransport` records BUZZ (`.buzzes`, `.buzzing(node)`);
+  `tools/simulate_nodes.py` accepts and ignores it.
+- Config: `"buzzer_node": 1` in `config.example.json`.
+- Checked without hardware: the four firmware environments build, the native
+  parser test passes, and the Python suite passes (119 tests; `test_udp` needs
+  UDP 4210 free, so close the tracker first). The new wiring and the buzzer
+  have not been flashed or run on the boxes yet.
+
 ## 2026-09-23 — swarm tracker: no more prediction
 
 - `whack/swarm.py`: the alpha-beta `Motion` filter (velocity + extrapolation) is
