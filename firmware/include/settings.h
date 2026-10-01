@@ -8,6 +8,16 @@
 #include "config.local.h"
 #endif
 
+// Network profiles were removed on 2026-10-01. A private config that still
+// carries one of their settings would otherwise build and join whatever
+// WIFI_SSID happens to hold, so stop the build and name the fix instead.
+#if defined(WIFI_PROFILE) || defined(SCHOOL_WIFI_SSID) || defined(SCHOOL_WIFI_PASSWORD) || \
+    defined(TRACKER_WIFI_SSID) || defined(TRACKER_WIFI_PASSWORD) || defined(TRACKER_WIFI_CHANNEL) || \
+    defined(ONENET_SSID) || defined(ONENET_USERNAME) || defined(ONENET_PASSWORD) || \
+    defined(ONENET_SERVER_DOMAIN) || defined(ONENET_BUILD_TIMEZONE)
+#error "Network profiles were removed: put the phone hotspot name and password in WIFI_SSID / WIFI_PASSWORD and delete the WIFI_PROFILE, SCHOOL_WIFI_*, TRACKER_WIFI_* and ONENET_* lines from your private config"
+#endif
+
 // The one network: a phone hotspot (WPA2-personal, 2.4 GHz) that the laptop
 // and every box join. An empty name builds, but the board reports missing
 // credentials over USB and never tries to connect.

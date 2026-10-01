@@ -23,8 +23,10 @@
   over USB and never connects. A name longer than 32 bytes fails the build.
 - Private configs are not migrated automatically. An existing `config.local.h`
   or `tracker_config.h` that selected a profile must have its hotspot name and
-  password moved into `WIFI_SSID` / `WIFI_PASSWORD` by hand; the old names are
-  ignored.
+  password moved into `WIFI_SSID` / `WIFI_PASSWORD` by hand. `settings.h`
+  refuses to build while any removed name (`WIFI_PROFILE`, `SCHOOL_WIFI_*`,
+  `TRACKER_WIFI_*`, `ONENET_*`) is still defined and names the fix, so an old
+  config cannot silently join the network left in `WIFI_SSID`.
 - Tools: `tools/prepare_tracker_firmware.py` lost `--network`, the generated
   `tracker_network.h` and `tracker_network.local.json`; its `tracker_config.h`
   template has the single Wi-Fi block. It still never overwrites an existing

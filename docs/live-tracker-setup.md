@@ -185,9 +185,10 @@ existing `tracker_config.h` keeps what it was created with:
 
 - If it still says servo 25 and ECHO 35, change its `SERVO_PIN`,
   `ULTRASONIC_TRIG_PIN` and `ULTRASONIC_ECHO_PIN` lines to 33, 32 and 34 by hand.
-- If it still sets `WIFI_PROFILE` or `SCHOOL_WIFI_*`, move the hotspot name and
-  password into `WIFI_SSID` and `WIFI_PASSWORD` by hand. The old names are
-  ignored now, and an old `tracker_network.h` tab is no longer used.
+- If it still sets `WIFI_PROFILE`, `SCHOOL_WIFI_*`, `TRACKER_WIFI_*` or
+  `ONENET_*`, the sketch stops compiling with `Network profiles were removed`.
+  Move the hotspot name and password into `WIFI_SSID` and `WIFI_PASSWORD` by
+  hand and delete those lines. An old `tracker_network.h` tab is no longer used.
 
 1. Open `firmware/arduino/tracker_left/tracker_left.ino` in Arduino IDE.
 2. In `tracker_config.h`, enter the phone hotspot as `WIFI_SSID` and
