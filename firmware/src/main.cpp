@@ -23,31 +23,20 @@
  * The sensors report echoes from reflecting surfaces; neither this firmware
  * nor the servo measures an exact target bearing or identifies a person.
  * Background rejection, combining the two observations, and the on-screen dot
- * belong to the laptop. In profile 3 the left board also supplies Wi-Fi, but
- * being the access point does not make it the tracking coordinator.
+ * belong to the laptop. Every board is an ordinary Wi-Fi station on the phone
+ * hotspot, and so is the laptop, which is the tracking coordinator.
  */
 
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <esp_arduino_version.h>
-#include <atomic>
 
 #include "settings.h"
 #include "wm_protocol.h"
 
 #if ESP_ARDUINO_VERSION_MAJOR != 2 && ESP_ARDUINO_VERSION_MAJOR != 3
 #error "This firmware supports Arduino-ESP32 core 2.x and 3.x"
-#endif
-#if WIFI_PROFILE == 2
-#if ESP_ARDUINO_VERSION_MAJOR < 3 || (ESP_ARDUINO_VERSION_MAJOR == 3 && ESP_ARDUINO_VERSION_MINOR < 3)
-#error "OneNet requires Arduino-ESP32 3.3+ with EAP CA bundle/domain checks. Use WIFI_PROFILE 0 or 1 on this core."
-#else
-#include <esp_eap_client.h>
-#include <esp_wifi.h>
-#include <sys/time.h>
-#include <time.h>
-#endif
 #endif
 
 namespace {
@@ -58,7 +47,7 @@ namespace {
 constexpr uint16_t kHostPort = 4210;
 constexpr uint16_t kNodePort = 4211;
 constexpr uint32_t kHelloIntervalMs = 2000;
-constexpr uint32_t kReconnectIntervalMs = WIFI_PROFILE == 2 ? 45000 : 10000;
+constexpr uint32_t kReconnectIntervalMs = 10000;
 constexpr uint32_t kSessionIdleMs = 30000;
 constexpr uint8_t kServoChannel = 0;
 constexpr uint8_t kServoBits = 16;
@@ -72,16 +61,16 @@ constexpr uint8_t kBuzzerChannel = 2;
 constexpr uint8_t kBuzzerBits = 10;
 #endif
 constexpr size_t kCacheSize = 16;
+// The one network: the phone hotspot named in the private configuration. An
+// empty name means no credentials were entered, so nothing is ever joined.
+constexpr char kWifiSsid[] = WIFI_SSID;
+constexpr bool kHaveWifiCredentials = sizeof(kWifiSsid) > 1;
 
 WiFiUDP udp;
 // UDP readiness, PWM setup success and a servo's settling deadline are separate:
 // a working network does not prove that the motor is configured or has arrived.
 bool udp_ready = false;
 bool servo_ready = false;
-#if WIFI_PROFILE == 3 && NODE_ID == 0
-std::atomic<bool> ap_running{false};
-bool ap_configured = false;
-#endif
 uint32_t reconnect_at = 0;
 uint32_t last_hello_at = 0;
 uint32_t servo_ready_at = 0;
@@ -140,31 +129,8 @@ bool reached(uint32_t now, uint32_t deadline) {
 }
 
 bool network_available() {
-#if WIFI_PROFILE == 3 && NODE_ID == 0
-  // An AP has no upstream STA connection; WL_CONNECTED never becomes true.
-  return ap_configured && ap_running.load(std::memory_order_relaxed) &&
-         WiFi.getMode() == WIFI_AP;
-#else
+  // Every board is a station: usable only while associated with the hotspot.
   return WiFi.status() == WL_CONNECTED;
-#endif
-}
-
-IPAddress network_address() {
-  // Profile 3 left has an AP address; the other modes use a station address.
-  // Sending broadcasts with the wrong interface's IP/mask would hide the node.
-#if WIFI_PROFILE == 3 && NODE_ID == 0
-  return WiFi.softAPIP();
-#else
-  return WiFi.localIP();
-#endif
-}
-
-IPAddress network_mask() {
-#if WIFI_PROFILE == 3 && NODE_ID == 0
-  return WiFi.softAPSubnetMask();
-#else
-  return WiFi.subnetMask();
-#endif
 }
 
 void reset_session() {
@@ -550,122 +516,15 @@ void settle_if_ready() {
   }
 }
 
-const char* selected_ssid() {
-  // Profile selection does not erase another environment's credentials:
-  // 0 = home, 1 = school personal/hotspot, 2 = OneNet enterprise, 3 = TrackerNet.
-  // In Arduino sketches tracker_network.h may override the selected profile;
-  // per-board mounting settings remain in tracker_config.h.
-#if WIFI_PROFILE == 3
-  return TRACKER_WIFI_SSID;
-#elif WIFI_PROFILE == 2
-  return ONENET_SSID;
-#elif WIFI_PROFILE == 1
-  return SCHOOL_WIFI_SSID;
-#else
-  return WIFI_SSID;
-#endif
-}
-
-#if WIFI_PROFILE == 2 && ESP_ARDUINO_VERSION_MAJOR == 3 && ESP_ARDUINO_VERSION_MINOR >= 3
-bool set_certificate_clock() {
-  // A build-time clock is a bootstrap approximation, not a persistent RTC.
-  // Recompile immediately before campus use; NTP updates it after connection.
-  if (time(nullptr) >= 1735689600) return true;
-  const char* months = "JanFebMarAprMayJunJulAugSepOctNovDec";
-  char month[4] = {};
-  tm built = {};
-  int year = 0;
-  sscanf(__DATE__, "%3s %d %d", month, &built.tm_mday, &year);
-  sscanf(__TIME__, "%d:%d:%d", &built.tm_hour, &built.tm_min, &built.tm_sec);
-  const char* found = strstr(months, month);
-  if (!found) return false;
-  built.tm_mon = (found - months) / 3;
-  built.tm_year = year - 1900;
-  built.tm_isdst = -1;
-  setenv("TZ", ONENET_BUILD_TIMEZONE, 1);
-  tzset();
-  timeval clock = {mktime(&built), 0};
-  return clock.tv_sec >= 1735689600 && settimeofday(&clock, nullptr) == 0;
-}
-
-bool eap_setting(esp_err_t status) {
-  if (status == ESP_OK) return true;
-  esp_wifi_sta_enterprise_disable();
-  Serial.printf("OneNet setup failed: %s\n", esp_err_to_name(status));
-  return false;
-}
-#endif
-
 void begin_network() {
-  // Radio setup is separate from the tracking protocol. Either network role
-  // still receives laptop commands and returns only this board's own readings.
-#if WIFI_PROFILE == 3
-  const size_t ssid_length = strlen(TRACKER_WIFI_SSID);
-  const size_t password_length = strlen(TRACKER_WIFI_PASSWORD);
-  if (ssid_length == 0 || ssid_length > 32 || password_length < 8 || password_length > 63) {
-    Serial.println("Tracker network needs an SSID of 1..32 bytes and a shared password of 8..63 bytes");
-    return;  // Never create an open AP or fall back to another network.
-  }
-#if NODE_ID == 0
-  ap_configured = false;
-  if (WiFi.getMode() != WIFI_MODE_NULL) WiFi.softAPdisconnect(true);
-  const IPAddress ap_ip(192, 168, 4, 1);
-  const IPAddress subnet(255, 255, 255, 0);
-  // AP-only mode: the left sensor hosts the network; the laptop still schedules
-  // both trackers' AIM/FIRE commands. Clients use the ordinary DHCP pool.
-  // The right board and laptop receive addresses according to DHCP allocation;
-  // the right board is not guaranteed to be 192.168.4.2. Internet is unnecessary.
-  if (!WiFi.mode(WIFI_AP) ||
-      !WiFi.softAP(TRACKER_WIFI_SSID, TRACKER_WIFI_PASSWORD, TRACKER_WIFI_CHANNEL, 0, 4) ||
-      !WiFi.softAPConfig(ap_ip, ap_ip, subnet)) {
-    WiFi.softAPdisconnect(true);
-    Serial.println("Tracker access point setup failed; retrying shortly");
-    return;
-  }
-  ap_configured = true;
-  WiFi.setSleep(false);
-  Serial.printf("Tracker network: %s, left node 192.168.4.1, channel %u\n",
-                TRACKER_WIFI_SSID, TRACKER_WIFI_CHANNEL);
-  Serial.println("Connect the laptop to this network; right node receives its address by DHCP");
-#else
-  // Explicit zero IP selects DHCP, rather than retaining any previous static IP.
-  const IPAddress automatic(0, 0, 0, 0);
-  if (!WiFi.config(automatic, automatic, automatic)) {
-    Serial.println("Tracker network DHCP setup failed; retrying shortly");
-    return;
-  }
-  WiFi.begin(TRACKER_WIFI_SSID, TRACKER_WIFI_PASSWORD);
-#endif
-#elif WIFI_PROFILE == 2 && ESP_ARDUINO_VERSION_MAJOR == 3 && ESP_ARDUINO_VERSION_MINOR >= 3
-  if (!ONENET_USERNAME[0] || !ONENET_PASSWORD[0] || !ONENET_SERVER_DOMAIN[0]) {
-    Serial.println("OneNet needs ONENET_USERNAME, ONENET_PASSWORD and ONENET_SERVER_DOMAIN");
-    return;
-  }
-  if (!set_certificate_clock()) {
-    Serial.println("OneNet certificate clock unavailable; recompile before use");
-    return;
-  }
-  WiFi.disconnect();
-  if (!WiFi.STA.connect(ONENET_SSID, nullptr, 0, nullptr, false)) return;
-  if (!eap_setting(esp_eap_client_use_default_cert_bundle(true)) ||
-      !eap_setting(esp_eap_client_set_domain_name(ONENET_SERVER_DOMAIN)) ||
-      !eap_setting(esp_eap_client_set_disable_time_check(false)) ||
-      !eap_setting(esp_eap_client_set_eap_methods(ESP_EAP_TYPE_PEAP)) ||
-      !eap_setting(esp_eap_client_set_identity(reinterpret_cast<const unsigned char*>(ONENET_USERNAME), strlen(ONENET_USERNAME))) ||
-      !eap_setting(esp_eap_client_set_username(reinterpret_cast<const unsigned char*>(ONENET_USERNAME), strlen(ONENET_USERNAME))) ||
-      !eap_setting(esp_eap_client_set_password(reinterpret_cast<const unsigned char*>(ONENET_PASSWORD), strlen(ONENET_PASSWORD))) ||
-      !eap_setting(esp_wifi_sta_enterprise_enable())) return;
-  eap_setting(esp_wifi_connect());
-#elif WIFI_PROFILE == 1
-  WiFi.begin(SCHOOL_WIFI_SSID, SCHOOL_WIFI_PASSWORD);
-#else
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-#endif
+  // Radio setup is separate from the tracking protocol: join the hotspot as an
+  // ordinary WPA2-personal station and take an address from its DHCP server.
+  WiFi.begin(kWifiSsid, WIFI_PASSWORD);
 }
 
 void network_tick() {
   // Keep reconnecting without parking the main loop in a long connection wait.
-  // A dropped STA link or stopped AP invalidates pending command permissions.
+  // A dropped link invalidates pending command permissions.
   const uint32_t now = millis();
   if (!network_available()) {
     // Revoke every lease/cache and release ownership across network loss.
@@ -675,10 +534,10 @@ void network_tick() {
       udp_ready = false;
       Serial.println("Wi-Fi disconnected; pending commands cancelled");
     }
-    if (selected_ssid()[0] != '\0' && reached(now, reconnect_at)) {
+    if (kHaveWifiCredentials && reached(now, reconnect_at)) {
       reconnect_at = now + kReconnectIntervalMs;
       begin_network();
-      Serial.printf("Starting Wi-Fi profile %u\n", WIFI_PROFILE);
+      Serial.printf("Joining Wi-Fi \"%s\"\n", kWifiSsid);
     }
     return;
   }
@@ -686,18 +545,15 @@ void network_tick() {
   if (!udp_ready) {
     udp_ready = udp.begin(kNodePort) == 1;
     if (!udp_ready) return;
-    Serial.printf("Node %u ready at %s:%u (WM2 AIM/FIRE)\n", NODE_ID, network_address().toString().c_str(), kNodePort);
-#if WIFI_PROFILE == 2 && ESP_ARDUINO_VERSION_MAJOR == 3 && ESP_ARDUINO_VERSION_MINOR >= 3
-    configTime(0, 0, "pool.ntp.org", "time.google.com");
-#endif
+    Serial.printf("Node %u ready at %s:%u (WM2 AIM/FIRE)\n", NODE_ID, WiFi.localIP().toString().c_str(), kNodePort);
     last_hello_at = now - kHelloIntervalMs;
   }
   if (now - last_hello_at >= kHelloIntervalMs) {
     last_hello_at = now;
-    const IPAddress local = network_address();
-    const IPAddress mask = network_mask();
+    const IPAddress local = WiFi.localIP();
+    const IPAddress mask = WiFi.subnetMask();
     // Set all host bits (the bits outside the subnet mask) to 1 to form this
-    // network's broadcast address. Both nodes periodically announce themselves
+    // network's broadcast address. Every node periodically announces itself
     // so the laptop can discover DHCP addresses without hard-coding them.
     IPAddress broadcast;
     for (unsigned i = 0; i < 4; ++i)
@@ -756,21 +612,11 @@ void setup() {
   if (!buzzer_ready) Serial.println("Buzzer configuration failed; BUZZ commands are ignored");
 #endif
   WiFi.persistent(false);
-#if WIFI_PROFILE == 3 && NODE_ID == 0
-  // Wi-Fi events run on another task. Only the loop edits UDP/session state.
-  WiFi.onEvent([](arduino_event_id_t event) {
-    if (event == ARDUINO_EVENT_WIFI_AP_START) ap_running.store(true, std::memory_order_relaxed);
-    if (event == ARDUINO_EVENT_WIFI_AP_STOP) ap_running.store(false, std::memory_order_relaxed);
-  });
-  // begin_network validates credentials before enabling the AP radio.
-#else
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
-#endif
-  Serial.printf("Tracker node %u, Arduino %u.%u.%u, Wi-Fi profile %u\n", NODE_ID,
-                ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH,
-                WIFI_PROFILE);
+  Serial.printf("Tracker node %u, Arduino %u.%u.%u\n", NODE_ID,
+                ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH);
   Serial.printf("Pins: servo=%u, TRIG=%u, ECHO=%u (sensor on 3V3, ECHO wired directly)\n",
                 static_cast<unsigned>(SERVO_PIN), static_cast<unsigned>(ULTRASONIC_TRIG_PIN),
                 static_cast<unsigned>(ULTRASONIC_ECHO_PIN));
@@ -783,7 +629,10 @@ void setup() {
   Serial.printf("Buzzer: pin=%u, steady HIGH (active buzzer)\n",
                 static_cast<unsigned>(BUZZER_PIN));
 #endif
-  if (selected_ssid()[0] == '\0')
+  // The name only: the password is never printed.
+  if (kHaveWifiCredentials)
+    Serial.printf("Wi-Fi: will join \"%s\" (phone hotspot, 2.4 GHz)\n", kWifiSsid);
+  else
     Serial.println("No Wi-Fi credentials: edit tracker_config.h (Arduino IDE) or include/config.local.h (PlatformIO)");
 }
 

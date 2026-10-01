@@ -1,31 +1,16 @@
 #pragma once
 
 // Copy to config.local.h. That file is intentionally ignored by git.
-#define WIFI_SSID "your-2.4-GHz-network"
-#define WIFI_PASSWORD "your-password"
 
-// 0 = home, 1 = school personal/hotspot, 2 = OneNet PEAP, 3 = tracker network.
-// All profiles remain stored when switching this selection.
-#define WIFI_PROFILE 0
-#define SCHOOL_WIFI_SSID ""
-#define SCHOOL_WIFI_PASSWORD ""
-
-// Profile 3: left ESP32 creates this WPA2 network at 192.168.4.1/24.
-// Right ESP32 and laptop join it and receive DHCP addresses (order may vary).
-// Use the same private 8..63-character password on both boards. Empty passwords
-// are rejected; the firmware never falls back to an open network.
-// The preparation tool can generate matching private tracker_network.h files.
-#define TRACKER_WIFI_SSID "TrackerNet"
-#define TRACKER_WIFI_PASSWORD ""
-#define TRACKER_WIFI_CHANNEL 6
-
-// Optional/deferred OneNet: requires Arduino-ESP32 3.3+ with default CA bundle
-// and server-domain verification support. PlatformIO's older core is unsuitable.
-// Recompile before use to seed certificate time, or provide a trustworthy clock.
-#define ONENET_USERNAME ""
-#define ONENET_PASSWORD ""
-#define ONENET_SERVER_DOMAIN "radius.mq.edu.au"
-#define ONENET_BUILD_TIMEZONE "AEST-10AEDT,M10.1.0,M4.1.0/3"
+// The one supported network: a phone hotspot (WPA2-personal). The laptop and
+// every box join it. The ESP32 radio is 2.4 GHz only: on an iPhone turn on
+// "Maximise Compatibility" and keep the Personal Hotspot screen open while
+// the boxes join.
+// An iPhone's default hotspot name contains a typographic apostrophe (U+2019).
+// Write it as the UTF-8 bytes \xE2\x80\x99 inside the C string, for example
+// "Sam\xE2\x80\x99s iPhone".
+#define WIFI_SSID "your-phone-hotspot"
+#define WIFI_PASSWORD "your-hotspot-password"
 
 // Adjust separately for each servo installation. Bearings use world axes:
 // 0 degrees = +x (right), 90 degrees = +y (forward), 180 degrees = -x.
