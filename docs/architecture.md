@@ -9,7 +9,7 @@ Gameplay and installer work are outside this stage.
 
 | Component | Responsibility |
 | --- | --- |
-| `firmware/src/main.cpp` | Wi-Fi profiles, calibrated servo commands, bounded echo acquisition, WM2 protocol |
+| `firmware/src/main.cpp` | Phone-hotspot Wi-Fi connection, calibrated servo commands, bounded echo acquisition, WM2 protocol |
 | `whack/protocol.py` | Strict, versioned ASCII packet formats |
 | `whack/transport.py` | Nonblocking UDP discovery and a timed point-reflector simulator |
 | `whack/controller.py` | Concurrent aiming, exclusive ping turns, calibration and tracking states |
@@ -175,36 +175,34 @@ Optional diagnostics distinguish display FPS from accepted position updates,
 and show fix age, confidence and state. CSV and headless output include those
 fields and a prediction flag. There are no gameplay events or warning bells.
 
-## Network profiles and validation boundary
+## Network and validation boundary
 
-Local firmware configuration retains home and school credentials. Profile 0 is
-home, profile 1 is a school local network/hotspot, and profile 2 is optional
-OneNet PEAP on a compatible Arduino core. Profile 3 creates a local **TrackerNet**
-network on the left ESP32, which runs as a WPA2 access point at `192.168.4.1/24`.
-The right ESP32 and laptop join as Wi-Fi clients and receive DHCP addresses. The
-right node's IP is not assumed to be `.2`; WM2 discovery identifies it, or the
-user supplies the actual address from Serial Monitor.
+There is one supported network: a phone hotspot (WPA2-personal, 2.4 GHz). The
+laptop and every box join it as ordinary Wi-Fi clients and receive DHCP
+addresses. The firmware has no network profiles and no board acts as an access
+point. The hotspot name and password are `WIFI_SSID` and `WIFI_PASSWORD` in the
+private `tracker_config.h` (Arduino IDE) or `config.local.h` (PlatformIO).
 
-`python3 -m tools.prepare_tracker_firmware --network tracker` prepares both
-Arduino sketches with one shared random private password in their generated
-`tracker_network.h` files. This override selects profile 3 while preserving the
-existing home/school settings. A regular generator run preserves the selection;
-`--network configured` removes the override and restores the profile selected by
-each existing `tracker_config.h`. The user manually uploads both matching
-sketches after a change. Generation and the desktop controller never flash or
-connect to hardware automatically.
+Addresses are never assumed. Each box broadcasts `WM2 HELLO <node>` to UDP 4210
+every two seconds; the laptop listens on UDP 4210 and learns each box's address
+from that announcement, and the boxes receive commands on UDP 4211. `--nodes`
+is an optional override that supplies the addresses, left to right, for a
+network that blocks broadcast.
 
-With profile 3, boot the left board first and join **TrackerNet** on the laptop
-using the password shown in Arduino IDE's `tracker_network.h` tab. The laptop
-must remain connected when it reports no internet. The same desktop command,
-UDP protocol, servo coordination and tracking workflow are used on all profiles;
-TrackerNet adds no internet dependency. Its physical connection reliability
-remains to be verified.
+`python3 -m tools.prepare_tracker_firmware` prepares the Arduino sketches and
+never overwrites an existing `tracker_config.h`. The user manually uploads the
+matching sketch to each box after a change. Generation and the desktop
+controller never flash hardware.
+
+The field layout of the three-box prototype is the tracked
+`config.prototype.json`, so any computer with a clone can run it with
+`python3 -m whack --tracker swarm --config config.prototype.json`. The
+empty-field calibration (`calibration.local.json`) stays per computer, and
+`config.local.json` is an optional personal override; Git ignores both.
 
 Synthetic tests exercise packet handling, timing, ideal movement and loss.
 Physical tests are still needed for accurate body positioning, usable speed,
-servo settling, crosstalk, radio behavior and visible latency. OneNet authentication
-and tracker UDP access remain a deferred network test. See the
+servo settling, crosstalk, radio behavior and visible latency. See the
 [workflow](player-tracking-workflow.md) and [live setup](live-tracker-setup.md).
 
 ## Study reference

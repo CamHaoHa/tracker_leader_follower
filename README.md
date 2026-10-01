@@ -63,122 +63,126 @@ For diagnostics without a window:
 python3 -m whack --simulate --headless --seconds 5
 ```
 
-## Prepare and upload both ESP32s
+## Prepare and upload the ESP32s
 
 The user uploads firmware manually. Preparing the Arduino folders or starting
 the Python application does not flash a board.
 
 1. Wire each ESP32, servo and HC-SR04 using [firmware setup](firmware/README.md).
-2. Run `python3 -m tools.prepare_tracker_firmware --network tracker` from the
-   project root to prepare both boards for their own **TrackerNet** Wi-Fi.
-   Open the generated sketches in Arduino IDE. With three boxes use
+2. Run `python3 -m tools.prepare_tracker_firmware` from the project root, then
+   open the generated sketches in Arduino IDE. With three boxes use
    `tracker_left`, `tracker_middle` and `tracker_right` (nodes 0, 1, 2). With two
    boxes use `tracker_left` and `tracker_right_pair` (nodes 0, 1).
-3. Check each servo's calibration in `tracker_config.h`. The generated
-   `tracker_network.h` tab contains the shared TrackerNet password. Select
-   **ESP32 Dev Module**, then manually upload the
-   each sketch to the box at its position. Existing local config
-   files are preserved when regenerating the folders.
-4. Both boards must run the new **WM2 AIM/FIRE** firmware. The previous WM1
-   tracker and standalone USB/OneNet tests do not provide this workflow.
-5. Open Serial Monitor at **115200 baud** and note each node's IP address.
+3. In each sketch's `tracker_config.h`, enter the phone hotspot's name and
+   password as `WIFI_SSID` and `WIFI_PASSWORD` and check the servo calibration.
+   Select **ESP32 Dev Module**, then manually upload each sketch to the box at
+   its position. Existing local config files are preserved when regenerating
+   the folders.
+4. Every board must run the current **WM2 AIM/FIRE** firmware. The previous WM1
+   tracker and the standalone USB sensor sketches do not provide this workflow.
+5. Open Serial Monitor at **115200 baud**. Each board prints the hotspot name it
+   will join and, once connected, `Node n ready at <IP>:4211`.
 
 See the [live tracker setup guide](docs/live-tracker-setup.md) for the detailed
 upload and mounting sequence. PlatformIO remains available as an alternative;
 `pio run` compiles without uploading.
 
-### Connect to TrackerNet
+### Network: one phone hotspot
 
-Boot the left ESP32 first: it creates a password-protected **TrackerNet** access
-point at `192.168.4.1`. The right ESP32 joins automatically. On the laptop,
-select **TrackerNet** in Wi-Fi settings and enter the password from the generated
-`tracker_network.h` tab. Stay connected if the laptop reports no internet.
+The laptop and every box join **one phone hotspot** (WPA2-personal). It is the
+only supported network: the home, university and TrackerNet setups were removed
+on 2026-10-01, and the firmware has no network profiles any more.
 
-The laptop and right board receive their addresses automatically. The right
-board's address is **not guaranteed to be `192.168.4.2`**; read its Serial Monitor
-if an address is needed. This network can be used at home or school without
-changing either environment's saved credentials.
+- The ESP32 radio is **2.4 GHz only**. On an iPhone turn on **Maximise
+  Compatibility** and keep the Personal Hotspot screen open while the boxes join.
+- An iPhone's default hotspot name contains a typographic apostrophe (U+2019).
+  In the firmware config write it as the UTF-8 bytes `\xE2\x80\x99`, for example
+  `"Sam\xE2\x80\x99s iPhone"`.
+- No IP address is entered anywhere. Every box broadcasts `WM2 HELLO <node>` to
+  UDP 4210 every two seconds; the laptop listens there and finds the boxes. The
+  boxes receive their commands on UDP 4211.
 
-Start the regular visualizer after joining; both nodes should be discovered:
-
-```bash
-python3 -m whack --config config.local.json
-```
-
-If discovery fails, replace `ACTUAL_RIGHT_IP` with the right board's serial IP:
+Start the three-box prototype once the laptop is on the hotspot:
 
 ```bash
-python3 -m whack --config config.local.json --nodes 192.168.4.1 ACTUAL_RIGHT_IP
+python3 -m whack --tracker swarm --config config.prototype.json
 ```
 
-### Retained home and school profiles
-
-Keep both environments configured in the local firmware settings:
-
-| `WIFI_PROFILE` | Network |
-| --- | --- |
-| `0` | Home network: `WIFI_SSID` and `WIFI_PASSWORD` |
-| `1` | School local network/hotspot: `SCHOOL_WIFI_SSID` and `SCHOOL_WIFI_PASSWORD` |
-| `2` | Optional Macquarie OneNet PEAP credentials |
-| `3` | TrackerNet: left ESP32 creates Wi-Fi; right ESP32 and laptop join |
-
-`--network tracker` generates a shared random private password and selects
-profile 3 through `tracker_network.h`; it preserves both `tracker_config.h`
-files. Running the generator without `--network` preserves the selection. To
-return to the profile selected in each existing `tracker_config.h`, run:
+`--nodes` is an optional override for a network that blocks broadcast. Give the
+addresses from Serial Monitor, left to right:
 
 ```bash
-python3 -m tools.prepare_tracker_firmware --network configured
+python3 -m whack --tracker swarm --config config.prototype.json --nodes LEFT_IP MIDDLE_IP RIGHT_IP
 ```
 
-This removes the generated network override. Manually upload both matching
-sketches after changing network mode. Preparing files does not connect to,
-restart or upload either board.
+## Run on another computer
 
-For development at school, use a reachable 2.4 GHz local network shared by the
-laptop and both ESP32s. Internet access is not required. OneNet troubleshooting
-is deferred; its earlier successful ping does not establish tracker UDP support.
-The optional enterprise profile requires Arduino-ESP32 3.3+ with certificate
-and server-name verification support; the older PlatformIO core cannot use it.
+The boxes keep their firmware; only the laptop changes. The field setup of the
+three-box prototype travels with the repository in `config.prototype.json`.
+
+1. Clone this repository.
+2. Install **Python 3.10 or newer with tkinter**. On Debian/Ubuntu:
+   `sudo apt install python3-tk`. The tracker needs no pip packages.
+3. Join the **same phone hotspot** as the boxes.
+4. Allow **incoming UDP 4210** in the firewall (with ufw:
+   `sudo ufw allow 4210/udp`). The boxes announce themselves on that port.
+5. From the project root, run:
+
+   ```bash
+   python3 -m whack --tracker swarm --config config.prototype.json
+   ```
+
+6. Press **C** once with the field empty. The empty-field calibration is stored
+   per computer in `calibration.local.json`, which Git ignores, so a new
+   computer has none. Then press **Space** to start tracking.
+
+`config.local.json` is an optional personal override that Git ignores. Use it
+for a different layout with `--config config.local.json`; start it as a copy of
+`config.prototype.json` or `config.example.json`.
 
 ## Start a real tracking session
 
 1. Mount both sensors at the same torso height and depth with horizontal beams.
    Default acoustic centres are `(0, 0.20)` and `(1.50, 0.20)` metres. The default
    field runs from `x=0` to `1.50` and `y=0.60` to `2.00`, with the wall at `y=0`.
-2. Copy `config.example.json` to `config.local.json` and enter actual geometry,
-   range corrections and tracking limits.
-3. Join **TrackerNet** on the laptop, or use the selected home/school network
-   that allows communication between clients. The laptop receives on UDP 4210
-   and the boards on UDP 4211.
+2. The three-box prototype uses the tracked `config.prototype.json`: sensors at
+   `x = 0`, `0.75` and `1.50` on the line `y = 0.50`. For a different layout,
+   copy `config.example.json` to `config.local.json` (ignored by Git), enter the
+   actual geometry, range corrections and tracking limits, and pass
+   `--config config.local.json` instead.
+3. Join the phone hotspot on the laptop. The laptop receives on UDP 4210 and the
+   boards on UDP 4211.
 4. Start the visualizer:
 
 ```bash
-python3 -m whack --config config.local.json
+python3 -m whack --tracker swarm --config config.prototype.json
 ```
 
 5. Clear the whole field and press **C**. Stay out during the lead-in and dense
    background sweep. Each calibrated direction is sampled repeatedly; the
-   status reports progress.
-6. Stand briefly at the field centre. The default `center` mode confirms two
-   consistent foreground pairs before showing a tracked position. Press
-   **Space / R** to restart acquisition when needed.
+   status reports progress. When it has finished, press **Space** to search.
+6. Step into the field. The swarm tracker sweeps every box until one sees the
+   player, then aims the others at that estimate. Press **Space** to search
+   again when needed.
 7. Move slowly first. Watch the spot and use **D** to inspect measurement age,
    confidence and accepted update rate.
 
-To begin with a search across the field:
+The older paired two-box tracker confirms a player at the field centre first.
+It can begin with a search across the field instead (`--start-mode` has no
+effect on the swarm tracker):
 
 ```bash
-python3 -m whack --config config.local.json --start-mode search
+python3 -m whack --tracker pairs --config config.local.json --start-mode search
 ```
 
 Full-field acquisition can take longer than tracking an established target. The
 search covers the configured beam model; actual human echoes need physical tests.
 
-If broadcast discovery is unavailable, use the IPs from Serial Monitor:
+If broadcast discovery is unavailable, add `--nodes` with the IPs from Serial
+Monitor, left to right:
 
 ```bash
-python3 -m whack --config config.local.json --nodes 192.168.1.101 192.168.1.102
+python3 -m whack --tracker swarm --config config.prototype.json --nodes LEFT_IP MIDDLE_IP RIGHT_IP
 ```
 
 Background profiles are stored in `calibration.local.json`. Recalibrate after
