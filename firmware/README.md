@@ -66,9 +66,10 @@ There are no network profiles and no board acts as an access point.
   finds the boxes; no IP address is configured on either side.
 
 A private config written before 2026-10-01 may still set `WIFI_PROFILE`,
-`SCHOOL_WIFI_*`, `ONENET_*` or `TRACKER_WIFI_*`. Those names are ignored now:
-move the hotspot name and password into `WIFI_SSID` and `WIFI_PASSWORD` by hand
-and delete the rest. A `tracker_network.h` tab left in an older generated sketch
+`SCHOOL_WIFI_*`, `ONENET_*` or `TRACKER_WIFI_*`. The build then stops with
+`Network profiles were removed: ...` instead of joining the wrong network: move
+the hotspot name and password into `WIFI_SSID` and `WIFI_PASSWORD` by hand and
+delete those lines. A `tracker_network.h` tab left in an older generated sketch
 folder is no longer used and can be deleted.
 
 Run the three-box prototype with normal discovery:
