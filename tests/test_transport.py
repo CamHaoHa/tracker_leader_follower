@@ -202,7 +202,7 @@ class DiscoveryTests(unittest.TestCase):
             self.assertIsNone(transport.protocol_version(0))
             transport.close()
 
-    def test_softap_discovery_recovers_after_dhcp_change_and_conflicting_identity(self):
+    def test_discovery_recovers_after_dhcp_change_and_conflicting_identity(self):
         clock = Clock()
         with patch("whack.transport.socket.socket") as create:
             transport = UdpTransport(clock)
@@ -212,29 +212,29 @@ class DiscoveryTests(unittest.TestCase):
                 sock.recvfrom.side_effect = [*messages, BlockingIOError()]
                 transport.receive()
 
-            announce((b"WM2 HELLO 0", ("192.168.4.1", 4211)),
-                     (b"WM2 HELLO 1", ("192.168.4.2", 4211)))
-            self.assertEqual(transport.address(0), ("192.168.4.1", 4211))
-            self.assertEqual(transport.address(1), ("192.168.4.2", 4211))
+            announce((b"WM2 HELLO 0", ("172.20.10.2", 4211)),
+                     (b"WM2 HELLO 1", ("172.20.10.3", 4211)))
+            self.assertEqual(transport.address(0), ("172.20.10.2", 4211))
+            self.assertEqual(transport.address(1), ("172.20.10.3", 4211))
             clock.now = 1
             # A reused DHCP address claiming the wrong node and an early right
             # reassignment cannot silently replace two still-live identities.
-            announce((b"WM2 HELLO 0", ("192.168.4.2", 4211)),
-                     (b"WM2 HELLO 1", ("192.168.4.3", 4211)))
+            announce((b"WM2 HELLO 0", ("172.20.10.3", 4211)),
+                     (b"WM2 HELLO 1", ("172.20.10.4", 4211)))
             self.assertIsNone(transport.address(0))
             self.assertIsNone(transport.address(1))
-            self.assertEqual(transport.nodes[0][0], ("192.168.4.1", 4211))
-            self.assertEqual(transport.nodes[1][0], ("192.168.4.2", 4211))
+            self.assertEqual(transport.nodes[0][0], ("172.20.10.2", 4211))
+            self.assertEqual(transport.nodes[1][0], ("172.20.10.3", 4211))
             self.assertEqual(tuple(transport.protocol_version(n) for n in (0, 1)), (None, None))
             clock.now = 6.5
-            announce((b"WM2 HELLO 0", ("192.168.4.1", 4211)),
-                     (b"WM2 HELLO 1", ("192.168.4.3", 4211)))
+            announce((b"WM2 HELLO 0", ("172.20.10.2", 4211)),
+                     (b"WM2 HELLO 1", ("172.20.10.4", 4211)))
             self.assertIsNone(transport.address(1))  # Conflict hold-off remains active.
             clock.now = 7.1
-            announce((b"WM2 HELLO 0", ("192.168.4.1", 4211)),
-                     (b"WM2 HELLO 1", ("192.168.4.3", 4211)))
-            self.assertEqual(transport.address(0), ("192.168.4.1", 4211))
-            self.assertEqual(transport.address(1), ("192.168.4.3", 4211))
+            announce((b"WM2 HELLO 0", ("172.20.10.2", 4211)),
+                     (b"WM2 HELLO 1", ("172.20.10.4", 4211)))
+            self.assertEqual(transport.address(0), ("172.20.10.2", 4211))
+            self.assertEqual(transport.address(1), ("172.20.10.4", 4211))
             self.assertEqual(tuple(transport.protocol_version(n) for n in (0, 1)), (2, 2))
             sock.sendto.assert_not_called()  # Automatic discovery needs no IP preset.
             transport.close()
