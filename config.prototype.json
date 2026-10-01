@@ -1,0 +1,35 @@
+{
+  "width": 1.5,
+  "near_y": 0.6,
+  "far_y": 2.0,
+  "left_x": 0.0,
+  "right_x": 1.5,
+  "extra_sensor_x": [
+    0.75
+  ],
+  "sensor_y": 0.5,
+  "body_radius_m": 0.18,
+  "beam_half_angle_deg": 20.0,
+  "max_speed_m_s": 3.0,
+  "smoothing_tau_s": 0.12,
+  "max_pair_skew_s": 0.25,
+  "sweep_bounds_deg": [
+    [
+      0,
+      180
+    ],
+    [
+      0,
+      180
+    ],
+    [
+      0,
+      180
+    ]
+  ],
+  "servo_travel_deg": [
+    0,
+    180
+  ],
+  "buzzer_node": 1
+}
