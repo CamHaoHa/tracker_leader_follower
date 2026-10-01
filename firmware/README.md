@@ -33,87 +33,56 @@ These are the firmware defaults (`include/settings.h`). A local `config.local.h`
 
 ## Configure and flash
 
-For Arduino IDE, run
-`python3 -m tools.prepare_tracker_firmware --network tracker` from the project
-root to prepare both boards for TrackerNet. Open
-the sketch named after each box's position (`tracker_left`, `tracker_middle`,
-`tracker_right`, or `tracker_right_pair` for a two-box right box), check that sketch's
-`tracker_config.h` for per-servo calibration, select **ESP32
-Dev Module**, and upload to the matching board. The folders are generated from
-the maintained firmware, and regeneration preserves each local config file.
+For Arduino IDE, run `python3 -m tools.prepare_tracker_firmware` from the project
+root. Open the sketch named after each box's position (`tracker_left`,
+`tracker_middle`, `tracker_right`, or `tracker_right_pair` for a two-box right
+box). In that sketch's `tracker_config.h`, enter the phone hotspot as
+`WIFI_SSID` and `WIFI_PASSWORD` and check the per-servo calibration. Select
+**ESP32 Dev Module** and upload to the matching board. The folders are generated
+from the maintained firmware, and regeneration preserves each local config file.
 The preparation command only writes sketch files; it does not flash a board.
-Both units must receive the updated WM2 tracking firmware. The prior WM1 tracker,
-USB sensor sketch and standalone OneNet tests do not implement this workflow.
+Every unit must receive the current WM2 tracking firmware. The prior WM1 tracker
+and the USB sensor sketch do not implement this workflow.
 See [live setup](../docs/live-tracker-setup.md) for the complete sequence.
 
-### TrackerNet: Wi-Fi provided by the left board
+### Wi-Fi: the phone hotspot
 
-Profile **3** makes node 0 a Wi-Fi access point (SoftAP). It creates the
-WPA2-protected **TrackerNet** network at `192.168.4.1` with subnet mask
-`255.255.255.0`. Node 1 joins automatically using the same generated credentials.
-The laptop joins through its normal Wi-Fi settings.
+The firmware joins exactly one network as an ordinary WPA2-personal station:
+the phone hotspot named by `WIFI_SSID` and `WIFI_PASSWORD` in `tracker_config.h`
+(Arduino) or `config.local.h` (PlatformIO). The laptop joins the same hotspot.
+There are no network profiles and no board acts as an access point.
 
-The preparation command creates a shared random private password in
-`tracker_network.h` in each generated sketch folder. Open that tab in Arduino
-IDE to read the password for the laptop. Both matching sketches must be manually
-uploaded before using this mode. Keep the network header local; it is not a
-published example password.
+- The ESP32 radio is **2.4 GHz only**. On an iPhone turn on **Maximise
+  Compatibility** and keep the Personal Hotspot screen open while the boxes join.
+- An iPhone's default hotspot name contains a typographic apostrophe (U+2019).
+  Write it as the UTF-8 bytes `\xE2\x80\x99` inside the C string, for example
+  `"Sam\xE2\x80\x99s iPhone"`. A name longer than 32 bytes fails the build.
+- At boot each board prints `Wi-Fi: will join "<name>" (phone hotspot, 2.4 GHz)`.
+  The password is never printed.
+- While it is not connected, the board prints `Joining Wi-Fi "<name>"` and tries
+  again every 10 s. A lost connection cancels pending commands.
+- Once connected it prints `Node n ready at <IP>:4211 (WM2 AIM/FIRE)` and
+  broadcasts `WM2 HELLO n` to UDP 4210 every two seconds. That is how the laptop
+  finds the boxes; no IP address is configured on either side.
 
-Boot the left board first, then the right. On the laptop select **TrackerNet**,
-enter the generated password and stay connected if warned that the network has
-no internet. The laptop and right board use DHCP; the right board is not assigned
-a guaranteed `192.168.4.2`. Read its actual address in Serial Monitor at 115200
-baud if needed.
+A private config written before 2026-10-01 may still set `WIFI_PROFILE`,
+`SCHOOL_WIFI_*`, `ONENET_*` or `TRACKER_WIFI_*`. Those names are ignored now:
+move the hotspot name and password into `WIFI_SSID` and `WIFI_PASSWORD` by hand
+and delete the rest. A `tracker_network.h` tab left in an older generated sketch
+folder is no longer used and can be deleted.
 
-Run the visualizer with normal discovery:
-
-```bash
-python3 -m whack --config config.local.json
-```
-
-If discovery fails, replace `ACTUAL_RIGHT_IP` with the right board's serial IP:
-
-```bash
-python3 -m whack --config config.local.json --nodes 192.168.4.1 ACTUAL_RIGHT_IP
-```
-
-The local network supplies tracker communication without internet. Its stability
-with both physical boards still needs testing. Servo and tracking behavior are
-the same across network profiles.
-
-### Retained home and school profiles
-
-Keep credentials local in `tracker_config.h` (Arduino) or `config.local.h`
-(PlatformIO). Select one profile without deleting the others:
-
-| Setting | Use |
-| --- | --- |
-| `WIFI_PROFILE 0` | Home: `WIFI_SSID`, `WIFI_PASSWORD` |
-| `WIFI_PROFILE 1` | School local network/hotspot: `SCHOOL_WIFI_SSID`, `SCHOOL_WIFI_PASSWORD` |
-| `WIFI_PROFILE 2` | Optional OneNet PEAP: `ONENET_USERNAME`, `ONENET_PASSWORD` |
-| `WIFI_PROFILE 3` | Left-board TrackerNet access point; right board and laptop join |
-
-The laptop and both boards need a network allowing local UDP communication.
-Internet access is unnecessary. Change the selected profile and manually upload
-again when switching networks. The generated `tracker_network.h` selects profile
-3 without altering the home/school settings in `tracker_config.h`. Regeneration
-without `--network` preserves that selection. To remove the generated override
-and use each existing config's selected profile:
+Run the three-box prototype with normal discovery:
 
 ```bash
-python3 -m tools.prepare_tracker_firmware --network configured
+python3 -m whack --tracker swarm --config config.prototype.json
 ```
 
-Manually upload both sketches after changing mode. Older local config files are
-preserved; add missing profile fields from the example when upgrading them.
+`--nodes` is an optional override for a network that blocks broadcast. Give the
+addresses from Serial Monitor, left to right:
 
-The OneNet path uses certificate validation and the configured server domain
-(`radius.mq.edu.au` by default). It requires Arduino-ESP32 **3.3+** with its CA
-bundle and EAP domain-check APIs. Certificate time is seeded from the build
-stamp using `ONENET_BUILD_TIMEZONE`; rebuild before testing or provide a trusted
-clock. The older PlatformIO core below rejects this profile at compile time.
-OneNet login reliability and tracker UDP access remain unverified and deferred.
-Profiles 0, 1 and 3 support the current local tracking workflow.
+```bash
+python3 -m whack --tracker swarm --config config.prototype.json --nodes LEFT_IP MIDDLE_IP RIGHT_IP
+```
 
 ### PlatformIO alternative
 
@@ -124,7 +93,7 @@ Install PlatformIO Core or its VS Code extension, then run from this directory:
 
 ```bash
 cp include/config.example.h include/config.local.h
-# Edit config.local.h: Wi-Fi credentials and per-node calibration.
+# Edit config.local.h: the phone hotspot's name and password, and per-node calibration.
 pio run
 pio run -e node_left   -t upload --upload-port /dev/ttyUSB0   # node 0
 pio run -e node_middle -t upload --upload-port /dev/ttyUSB1   # node 1
@@ -133,7 +102,7 @@ pio run -e node_right  -t upload --upload-port /dev/ttyUSB2   # node 2
 pio device monitor --port /dev/ttyUSB0 --baud 115200
 ```
 
-Choose the actual ports on your machine. `config.local.h` is gitignored. Builds also work without that file, but the firmware then reports missing credentials over USB and does not connect. Credentials are stored in the flashed image; this is intended for a local project network.
+Choose the actual ports on your machine. `config.local.h` is gitignored. Builds also work without that file, but the firmware then reports missing credentials over USB and does not connect. Credentials are stored in the flashed image; this is intended for the project's phone hotspot.
 
 PlatformIO remains pinned to `espressif32@7.0.1`, whose [official release lists Arduino 2.0.17](https://github.com/platformio/platform-espressif32/releases/tag/v7.0.1). The firmware selects the appropriate servo PWM API for Arduino ESP32 2.x or 3.x. Arduino 3 uses [LEDC channel attachment and writes](https://docs.espressif.com/projects/arduino-esp32/en/latest/api/ledc.html); no external servo library is needed.
 

@@ -29,18 +29,20 @@ provisional mapping at the user's request; its physical scale still needs a
 separate measurement.
 
 Manually upload the matching updated sketch to each board, close the visualizer,
-wait two seconds, and remain connected to TrackerNet. Run these commands individually:
+wait two seconds, and keep the laptop on the phone hotspot the boxes use. Run
+these commands individually, replacing `ACTUAL_LEFT_IP` with the left board's
+Serial Monitor address:
 
 ```bash
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 90 --count 1
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 60 --count 1
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 90 --count 1
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 120 --count 1
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 90 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 90 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 60 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 90 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 120 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 90 --count 1
 ```
 
-For the right tracker, use `--ip 192.168.4.2 --node 1` with the same angle
-sequence. Use its actual Serial Monitor IP if DHCP assigns another address.
+For the right tracker, use its own Serial Monitor address and `--node 1` with
+the same angle sequence.
 
 After confirming central movement, test these angles one at a time:
 `90 → 60 → 45 → 30 → 45 → 60 → 90 → 120 → 135 → 150 → 135 → 120 → 90`.

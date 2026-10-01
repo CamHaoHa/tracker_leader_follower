@@ -12,27 +12,29 @@ still exceeds these temporary limits.
 2. Select **ESP32 Dev Module** and the left board's port; upload.
 3. Open `firmware/arduino/tracker_right_pair/tracker_right_pair.ino` (node 1 in a two-box layout), select the right
    board's port and upload that sketch to it.
-4. Open Serial Monitor at **115200 baud**. Boot the left board first: it creates
-   **TrackerNet** at `192.168.4.1`. The right board joins automatically.
-5. Note the right board's actual IP. DHCP does not guarantee `192.168.4.2`.
-6. On the laptop, join **TrackerNet** using the password in the generated
-   `tracker_network.h` Arduino tab. Stay connected when warned of no internet.
+4. Open Serial Monitor at **115200 baud**. Each board prints the phone hotspot
+   it will join and, once connected, `Node n ready at <IP>:4211`.
+5. Note both boards' IPs for the probe commands below. The hotspot assigns them
+   by DHCP, so they can change between sessions.
+6. On the laptop, join the same phone hotspot.
 
-The generated sketches already contain the shared network settings. Preparation
-and the laptop application do not upload firmware automatically. Existing home
-and school profiles remain stored.
+Each sketch takes the hotspot name and password from `WIFI_SSID` and
+`WIFI_PASSWORD` in its `tracker_config.h`; see the
+[network section of the live setup](live-tracker-setup.md#network-one-phone-hotspot).
+Preparation and the laptop application do not upload firmware automatically.
 
 ## 2. Check each servo's scale and forward direction
 
 Close the visualizer before using a probe. Run one command at a time and watch
-what the mount actually does. For the left unit:
+what the mount actually does. For the left unit, replace `ACTUAL_LEFT_IP` with
+its Serial Monitor address:
 
 ```bash
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 90 --count 1
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 60 --count 1
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 90 --count 1
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 120 --count 1
-python3 -m tools.probe_node --ip 192.168.4.1 --node 0 --angle 90 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 90 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 60 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 90 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 120 --count 1
+python3 -m tools.probe_node --ip ACTUAL_LEFT_IP --node 0 --angle 90 --count 1
 ```
 
 Repeat **90 → 60 → 90 → 120 → 90** on the right unit, replacing the IP with its
@@ -88,11 +90,11 @@ mkdir -p results
 python3 -m whack --config config.test-field.json --calibration calibration.test-field.local.json --record results/first-live-test.csv
 ```
 
-If discovery fails, close the application and add the two IPs, replacing the
-right-hand placeholder:
+If discovery fails, close the application and add the two IPs, replacing both
+placeholders:
 
 ```bash
-python3 -m whack --config config.test-field.json --calibration calibration.test-field.local.json --record results/first-live-test.csv --nodes 192.168.4.1 ACTUAL_RIGHT_IP
+python3 -m whack --config config.test-field.json --calibration calibration.test-field.local.json --record results/first-live-test.csv --nodes ACTUAL_LEFT_IP ACTUAL_RIGHT_IP
 ```
 
 Press **D** to show diagnostics. Wait for both sensors, clear the whole field,
