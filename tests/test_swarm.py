@@ -4,11 +4,11 @@ import json
 import math
 import tempfile
 import unittest
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from pathlib import Path
 
 from whack.swarm import SwarmController, fuse, Contribution
-from whack.tracking import Geometry
+from whack.tracking import Geometry, load_geometry
 from whack.transport import SimulatedTransport
 
 
@@ -131,20 +131,173 @@ class AcquisitionTests(unittest.TestCase):
         self.assertEqual(snap.state, "track")
         self.assertLess(math.dist(snap.position, (1.1, 1.0)), 0.15)
 
-    def test_loss_jitters_then_resumes_sweep_from_current_bearing(self):
+    def test_loss_jitters_then_searches_then_resumes_the_sweep(self):
         c, clock, t = make()
         run(c, clock, 4)
         before = len(t.commands)
         t.target = None
-        snap = run(c, clock, 3)
+        snap = run(c, clock, 9)
         self.assertEqual(snap.state, "find")
         modes = [b.mode for b in c.boxes]
         self.assertEqual(modes, ["sweep", "sweep"])
         later = [a//1000 for _, n, kind, _, a in t.commands[before:] if kind == "AIM" and n == 0]
-        # jitter offsets of 8 deg appear before 5-degree stepping resumes
+        # jitter offsets of 8 deg appear first...
         self.assertTrue(any(abs(later[i+1]-later[i]) in (8, 16) for i in range(min(8, len(later)-1))), later[:10])
+        # ...then the search in 15-degree steps, and 5-degree stepping resumes after it
+        self.assertTrue(any(abs(b-a) == 15 for a, b in zip(later, later[1:])), later)
         tail = later[-4:]
         self.assertTrue(all(abs(tail[i+1]-tail[i]) == 5 for i in range(len(tail)-1)))
+
+
+PROTOTYPE = Path(__file__).resolve().parents[1] / "config.prototype.json"
+COLUMNS = {1: (0.25, 1.1), 2: (0.75, 1.1), 3: (1.25, 1.1)}      # the player's spot in front of each column
+FAR_ROW = {1: (0.25, 1.7), 3: (1.25, 1.7)}
+
+
+def prototype(target, **changes):
+    """The three-box prototype field with a player already tracked at `target`."""
+    clock = Clock()
+    c = SwarmController(replace(load_geometry(str(PROTOTYPE)), **changes), simulate=True, clock=clock)
+    c.transport.target = target
+    run(c, clock, 6)
+    return c, clock, c.transport
+
+
+def reacquire(controller, clock, spot, limit=20):
+    """Move the player to `spot`; seconds until the tracker reports a fix there."""
+    controller.transport.target = spot
+    start = clock.now
+    for _ in range(round(limit/.01)):
+        snap = controller.poll()
+        if snap.position is not None and math.dist(snap.position, spot) < .25:
+            return clock.now - start
+        clock.advance()
+    raise AssertionError("player not found again in the simulator")
+
+
+def until_lost(controller, clock, seconds=3):
+    """Poll until the player is declared lost; index of the first command sent from that poll on."""
+    for _ in range(round(seconds/.01)):
+        mark = len(controller.transport.commands)
+        snap = controller.poll(); clock.advance()
+        if snap.state == "find":
+            return mark
+    raise AssertionError("player not lost in the simulator")
+
+
+def aims_since(transport, mark, node):
+    return [a//1000 for _, n, kind, _, a in transport.commands[mark:] if kind == "AIM" and n == node]
+
+
+class JumpTests(unittest.TestCase):
+    """The player leaves every beam at once, e.g. jumps from column 1 to column 3."""
+
+    def test_a_player_who_skips_a_column_is_found_again_quickly(self):
+        # Before the search these took 3.3 to 9.1 simulated seconds.
+        for a, b in ((COLUMNS[1], COLUMNS[3]), (COLUMNS[3], COLUMNS[1]),
+                     (FAR_ROW[1], FAR_ROW[3]), (FAR_ROW[3], FAR_ROW[1])):
+            with self.subTest(jump=(a, b)):
+                c, clock, t = prototype(a)
+                self.assertLess(reacquire(c, clock, b), 2.5)
+
+    def test_a_step_to_the_next_column_is_no_slower(self):
+        for a, b in ((1, 2), (2, 3), (2, 1), (3, 2)):
+            with self.subTest(jump=(a, b)):
+                c, clock, t = prototype(COLUMNS[a])
+                self.assertLess(reacquire(c, clock, COLUMNS[b]), 1.5)
+
+    def test_full_loss_searches_each_end_once_in_big_steps_then_sweeps(self):
+        c, clock, t = prototype(COLUMNS[1])
+        t.target = None
+        mark = until_lost(c, clock)
+        self.assertTrue(all(box.search and box.mode == "sweep" for box in c.boxes))   # no jitter left
+        run(c, clock, 14)
+        for node in range(3):
+            with self.subTest(node=node):
+                seq = aims_since(t, mark, node)
+                self.assertTrue(all(0 <= a <= 180 for a in seq), seq)
+                low, high = seq.index(0), seq.index(180)
+                # Column 1 is on the high-bearing side of the field centre for
+                # every box, so each searches downward, across the field, first.
+                down = seq[:low+1]
+                self.assertTrue(all(0 < a-b <= 15 for a, b in zip(down, down[1:])), down)
+                self.assertEqual(seq[low:high+1], list(range(0, 181, 15)))
+                after = seq[high:high+6]
+                self.assertEqual(after, list(range(180, 150, -5)))
+                self.assertFalse(c.boxes[node].search)
+
+    def test_one_box_losing_the_player_still_jitters_and_starts_no_search(self):
+        c, clock, t = prototype(COLUMNS[1])
+        mark = len(t.commands)
+        t.target = lambda now, node: None if node == 2 else COLUMNS[1]
+        for _ in range(600):
+            snap = c.poll(); clock.advance()
+            self.assertEqual(snap.state, "track")
+            self.assertFalse(any(box.search for box in c.boxes))
+        seq = aims_since(t, mark, 2)
+        steps = {abs(b-a) for a, b in zip(seq, seq[1:])}
+        self.assertTrue(steps & {8, 16}, seq[:12])               # jitter round the aimed bearing
+        self.assertIn(5, steps)                                  # then the plain sweep
+        self.assertNotIn(15, steps)
+
+    def test_search_step_equal_to_the_sweep_step_searches_in_sweep_steps(self):
+        c, clock, t = prototype(COLUMNS[1], search_step_deg=5.0)
+        t.target = None
+        mark = until_lost(c, clock)
+        run(c, clock, 4)
+        seq = aims_since(t, mark, 1)
+        self.assertGreater(len(seq), 5)
+        self.assertTrue(all(abs(b-a) <= 5 for a, b in zip(seq, seq[1:])), seq)
+
+    def test_search_step_limits(self):
+        for bad in (4.0, 46.0):
+            with self.assertRaises(ValueError):
+                Geometry(search_step_deg=bad)
+        self.assertNotIn("search_step_deg", SwarmController.LAYOUT_FIELDS)   # a saved map stays valid
+
+
+class ExpectTests(unittest.TestCase):
+    """The game says where it expects the player (the mole's column)."""
+
+    def test_after_a_loss_every_box_looks_at_the_expected_spot_first(self):
+        c, clock, t = prototype(COLUMNS[1])
+        c.expect(COLUMNS[3])
+        t.target = COLUMNS[3]
+        start = clock.now
+        mark = until_lost(c, clock)
+        poll_while(c, clock, 3, lambda snap: snap.state == "track")
+        self.assertLess(clock.now - start, 1.5)
+        for node in range(3):
+            first = next(a for _, n, kind, _, a in t.commands[mark:] if kind == "AIM" and n == node)
+            self.assertEqual(first, c.geometry.angle(node, COLUMNS[3]))
+
+    def test_a_wrong_expectation_only_costs_one_look(self):
+        for a, b, wrong in ((1, 3, 2), (3, 1, 2), (1, 2, 3)):
+            with self.subTest(jump=(a, b), expected=wrong):
+                c, clock, t = prototype(COLUMNS[a])
+                c.expect(COLUMNS[wrong])
+                self.assertLess(reacquire(c, clock, COLUMNS[b]), 2.5)
+
+    def test_an_expectation_is_never_reported_as_the_position(self):
+        c, clock, t = prototype(COLUMNS[1])
+        c.expect(COLUMNS[3])
+        t.target = None
+        until_lost(c, clock)
+        for _ in range(500):
+            snap = c.poll(); clock.advance()
+            self.assertEqual(snap.state, "find")
+            self.assertIsNone(snap.position)
+
+    def test_a_point_outside_the_field_or_none_withdraws_it(self):
+        c, clock, t = prototype(COLUMNS[1])
+        c.expect(COLUMNS[3])
+        self.assertEqual(c.expected, COLUMNS[3])
+        c.expect((2.0, 1.1))
+        self.assertIsNone(c.expected)
+        c.expect(COLUMNS[3]); c.expect(None)
+        self.assertIsNone(c.expected)
+        c.expect(COLUMNS[3]); c.start_acquisition()              # a new search forgets it too
+        self.assertIsNone(c.expected)
 
 
 class AlertTests(unittest.TestCase):

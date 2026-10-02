@@ -1,3 +1,45 @@
+## 2026-10-02 — search after a full loss, mole hint
+
+- Problem: when the player skipped a column (mole at column 1, then column 3)
+  the tracker needed seconds to find them again. All three boxes were aimed at
+  the old spot and missed together; each then dithered ±8° round that empty spot
+  for `jitter_s` (1 s) and only then resumed its 5° sweep from the old bearing,
+  in whichever direction it had last swept, sometimes out to the end stop first.
+  The boxes only obey `AIM`/`FIRE`, so this is laptop logic in `whack/swarm.py`.
+- Swarm tracker: when no box has seen the player for `local_search_s` (the
+  existing "Player lost" moment) every box stops its jitter and searches: steps
+  of `search_step_deg` (new setting, default 15, between `sweep_step_deg` and
+  45), first toward the middle of the field, once out to each end of its arc,
+  then the plain 5° sweep again. Search bearings stay on the sweep grid, so a
+  saved calibration map remains valid. `search_step_deg` equal to
+  `sweep_step_deg` searches in plain sweep steps.
+- Unchanged: one box missing while another still tracks (jitter 1 s, sweep,
+  2 s re-aim cooldown), the first sweep after Search/Reset, the two-ping
+  confirmation of an echo, the ping schedule. No firmware change, no reflash.
+- New `SwarmController.expect(point)`: the game says where it expects the
+  player, e.g. the column the mole moved to. After a full loss each box looks
+  there first, then searches as above. It is never reported as a position; a
+  fix still needs a reliable echo. `None` or a point outside the field
+  withdraws it, and Search/Reset forgets it. The game repository does not call
+  it yet.
+- Status line while searching shows `search` instead of `sweep` for a box that
+  is in the search pass.
+- Simulator, `config.prototype.json`, seconds from the jump to the first fix
+  within 0.25 m (10 ms poll; player 0.6 m from the sensor line, "far" 1.2 m):
+
+  | Jump | Before | Search | Search + right hint | Search + wrong hint |
+  |---|---|---|---|---|
+  | column 1 → 3 | 3.64 | 1.44 | 0.86 | 1.46 |
+  | column 3 → 1 | 6.62 | 1.88 | 0.90 | 1.52 |
+  | column 1 → 3, far | 3.32 | 1.48 | 0.86 | 1.16 |
+  | column 3 → 1, far | 9.14 | 1.32 | 0.92 | 1.22 |
+  | next column (four cases) | 0.58–1.18 | same | 0.58–0.86 | 0.58–1.38 |
+
+  Not measured on hardware. The simulator has no Wi-Fi delay and sees a player
+  anywhere inside the ±20° beam model; if a real box steps over the player,
+  lower `search_step_deg` (10) in the config.
+- Tests: `JumpTests` and `ExpectTests` in `tests/test_swarm.py`.
+
 ## 2026-10-01 — prototype config in the repository, phone hotspot only
 
 - Config: `config.prototype.json` is the tracked field setup of the three-box

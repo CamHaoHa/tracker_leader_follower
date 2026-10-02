@@ -8,6 +8,13 @@ replaces on the leader-follower branch). Each box is driven on its own:
     aimed    point at the shared player estimate, whoever produced it
     jitter   dither around that bearing after misses, then go back to sweep
 
+When no box has seen the player for local_search_s the player has left the
+spot (a jump to another column, say), so dithering round it is pointless.
+Every box then searches instead: once out to each end of its arc in
+search_step_deg steps, across the middle of the field first, and after that
+the plain sweep again. If the game has said where it expects the player
+(expect(), the mole's column), each box looks there first.
+
 The first box with a RELIABLE echo (status OK, inside the reliable range,
 nearer than the empty-room map, and repeated) becomes the leader: its aim and
 range give a polar position estimate, and every other box is aimed at that
@@ -76,6 +83,8 @@ class Box:
     aimed_bearing: int = 90000
     aimed_point: tuple | None = None    # estimate this box was last sent to look at
     aim_cooldown_until: float = float("-inf")  # after a failed jitter, sweep at least until then
+    search: bool = False                # after a full loss: sweep in search steps
+    search_bounces: int = 0             # ends of the arc reached by this search; it stops at two
     rejections: dict = field(default_factory=dict)  # reason -> count, diagnostics
 
 
@@ -194,6 +203,9 @@ class SwarmController:
         self.boxes = [Box(n) for n in range(self.count)]
         self.seq = int(time.time()*1000) & MAX_SEQUENCE or 1
         self.step_mdeg = round(self.geometry.sweep_step_deg*1000)
+        # A whole number of sweep steps: the search stays on the calibrated grid.
+        self.search_mdeg = max(1, round(self.geometry.search_step_deg/self.geometry.sweep_step_deg))*self.step_mdeg
+        self.expected = None                    # where the game expects the player, see expect()
         self.estimate = Estimate(self.geometry)
         self.contributions: dict[int, Contribution] = {}
         self.good_times = deque(maxlen=12)
@@ -301,6 +313,18 @@ class SwarmController:
         self._clear_player()
         self.park_servos()
 
+    def expect(self, point):
+        """Tell the tracker where the game expects the player next, e.g. the
+        column the mole moved to. None, or a point outside the field, withdraws it.
+
+        It only decides where each box looks first after a full loss. It is
+        never a position: a fix still needs a reliable echo.
+        """
+        g = self.geometry
+        if point is not None and not (0 <= point[0] <= g.width and g.near_y <= point[1] <= g.far_y):
+            point = None
+        self.expected = point
+
     def park_servos(self):
         for n in range(self.count):
             address = self.transport.address(n)
@@ -325,8 +349,10 @@ class SwarmController:
         self.estimate.reset(); self.contributions.clear(); self.good_times.clear()
         self.state, self.reason, self.alert = "find", "Waiting for measurements", ""
         self.alert_since.clear(); self.outside_since = None; self._forget_too_close()
+        self.expected = None
         for box in self.boxes:
             box.mode, box.hold_bearing, box.last_reading = "sweep", None, None
+            box.search = False
 
     def _cancel_all(self):
         for box in self.boxes:
@@ -346,7 +372,49 @@ class SwarmController:
         lo, hi = self.geometry.sweep_bounds(node)
         return round(lo*1000), round(hi*1000)
 
+    def _start_search(self):
+        """Nobody sees the player any more: every box stops dithering round the
+        old spot and searches its arc, starting across the middle of the field.
+        An arc may reach past the field (0..180 on an outer box): the side with
+        more field in it comes first."""
+        g = self.geometry
+        middle = (g.width/2, (g.near_y + g.far_y)/2)
+        for box in self.boxes:
+            box.mode, box.hold_bearing = "sweep", None
+            box.aim_cooldown_until = float("-inf")
+            box.search, box.search_bounces = True, 0
+            start = box.bearing
+            if self.expected is not None:           # look where the game expects the player first
+                start = box.hold_bearing = self._clamp_travel(box.node, g.angle(box.node, self.expected))
+            box.step = -self.step_mdeg if start > g.angle(box.node, middle) else self.step_mdeg
+
+    def _next_search_bearing(self, box):
+        """The next search bearing, or None when both ends of the arc are done."""
+        lo, hi = self._bounds(box.node)
+        s = self.step_mdeg
+        first, last = math.ceil(lo/s)*s, math.floor(hi/s)*s
+        here = box.bearing
+        for _ in range(2):
+            if here % s != 0:       # snap in the search direction; the snap is part of the step
+                b = here - here % s - (self.search_mdeg - s) if box.step < 0 \
+                    else here + (s - here % s) + (self.search_mdeg - s)
+            else:
+                b = here + (self.search_mdeg if box.step > 0 else -self.search_mdeg)
+            b = max(first, min(last, b))
+            if b != here:
+                return b
+            box.step = -box.step                 # this end is done: turn round
+            box.search_bounces += 1
+            if box.search_bounces >= 2:
+                break
+        box.search = False
+        return None
+
     def _next_sweep_bearing(self, box):
+        if box.search:
+            b = self._next_search_bearing(box)
+            if b is not None:
+                return b
         lo, hi = self._bounds(box.node)
         s = self.step_mdeg
         b = box.bearing
@@ -500,6 +568,7 @@ class SwarmController:
                 continue                      # it already looked there and found nothing
             else:
                 box.mode, box.jitter_index = "aimed", 0
+            box.search = False
             box.aimed_bearing = self._clamp_travel(box.node, g.angle(box.node, point))
             box.aimed_point = point
 
@@ -656,6 +725,7 @@ class SwarmController:
             self.state = "find"
             self.reason = "Player lost — sweeping"
             self.contributions.clear()
+            self._start_search()
         if ready_to_run:
             # aim every idle box
             for box in self.boxes:
@@ -799,7 +869,7 @@ class SwarmController:
         elif self.state == "track":
             status = "Tracking player" if fresh_contrib >= 2 else "Tracking player (one box)"
         else:
-            modes = ", ".join(f"{b.node}:{b.mode}" for b in self.boxes)
+            modes = ", ".join(f"{b.node}:{'search' if b.search else b.mode}" for b in self.boxes)
             status = f"Searching — {modes}"
         if self.alert:
             status = f"PAUSE: {self.alert}"

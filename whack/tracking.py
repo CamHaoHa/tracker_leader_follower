@@ -85,6 +85,10 @@ class Geometry:
     # the default sweep arcs are clipped to it. The bench SG90s use (30, 150).
     servo_travel_deg: tuple = (0.0, 180.0)
     sweep_step_deg: float = 5.0
+    # Step of the search that follows a full loss (no box sees the player).
+    # Used as a whole number of sweep steps, so the bearings stay on the sweep
+    # grid; equal to sweep_step_deg = search in plain sweep steps.
+    search_step_deg: float = 15.0
     # Echoes beyond this are never used to lock; inside the field they are hints.
     reliable_range_m: float = 1.7
     # Minimum distance from a sensor before a detection counts (10 cm rule).
@@ -133,7 +137,8 @@ class Geometry:
         if bounds and (len(bounds) != self.sensor_count or any(
                 len(b) != 2 or not travel[0] <= b[0] < b[1] <= travel[1] for b in bounds)):
             raise ValueError("sweep_bounds_deg needs one (low, high) pair per sensor within servo_travel_deg")
-        if not (1 <= self.sweep_step_deg <= 30 and 0.3 <= self.reliable_range_m <= 4
+        if not (1 <= self.sweep_step_deg <= 30 and self.sweep_step_deg <= self.search_step_deg <= 45
+                and 0.3 <= self.reliable_range_m <= 4
                 and 0.02 <= self.min_player_range_m <= 0.5 and 0 <= self.background_margin_m <= 1
                 and 0 <= self.jitter_deg <= 45 and 0 <= self.jitter_s <= 5
                 and 0.2 <= self.two_player_separation_m <= 3):
