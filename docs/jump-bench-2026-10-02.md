@@ -24,7 +24,7 @@ Variants:
 - **before**: the tracker as it was. After a miss a box dithers ±8° round the
   old spot for 1 s, then resumes its 5° sweep from there. The tool reproduces
   it by switching the search off; on eight jumps this gave the same times as
-  the code of commit 612d492.
+  the code of commit 9799390.
 - **search**: the tracker as it is. After a full loss every box searches in 15°
   steps, toward the middle of the field first.
 - **right hint**: search, and the game named the spot the player jumps to
