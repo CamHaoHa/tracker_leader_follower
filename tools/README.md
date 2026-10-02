@@ -35,6 +35,20 @@ This records USB serial measurements and saves a new timestamped folder under
 distance argument is the measured true target gap, not a sensor command. See
 [evidence instructions](../evidence/README.md) for port selection and partial runs.
 
+## Jump benchmark (simulator)
+
+```bash
+python3 -m tools.jump_bench --csv results/jump-bench.csv --timeline
+```
+
+Times how fast the swarm tracker finds a player who jumps to another column, on
+`config.prototype.json` in the built-in simulator: before the search after a
+full loss, with it, and with a right or wrong `expect()` hint. It prints
+Markdown tables (median, fastest and slowest of 20 jump moments); `--csv`
+writes one row per trial and `--timeline` what each box does after one jump.
+The numbers repeat exactly and say nothing about Wi-Fi delay or real echoes.
+Recorded results: [jump benchmark, 2 October](../docs/jump-bench-2026-10-02.md).
+
 ## UDP sensor emulator
 
 `simulate_nodes.py` runs two independent UDP endpoints with the same messages as the ESP32 firmware. Use it to exercise discovery, network acquisition, tracking, and disconnection without physical sensors:

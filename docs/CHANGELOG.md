@@ -24,20 +24,29 @@
   it yet.
 - Status line while searching shows `search` instead of `sweep` for a box that
   is in the search pass.
-- Simulator, `config.prototype.json`, seconds from the jump to the first fix
-  within 0.25 m (10 ms poll; player 0.6 m from the sensor line, "far" 1.2 m):
+- Simulator, `config.prototype.json`, median seconds from the jump to the first
+  fix within 0.25 m over 20 jump moments (10 ms poll; player 0.6 m from the
+  sensor line, "far" 1.2 m):
 
   | Jump | Before | Search | Search + right hint | Search + wrong hint |
   |---|---|---|---|---|
-  | column 1 → 3 | 3.64 | 1.44 | 0.86 | 1.46 |
-  | column 3 → 1 | 6.62 | 1.88 | 0.90 | 1.52 |
-  | column 1 → 3, far | 3.32 | 1.48 | 0.86 | 1.16 |
-  | column 3 → 1, far | 9.14 | 1.32 | 0.92 | 1.22 |
-  | next column (four cases) | 0.58–1.18 | same | 0.58–0.86 | 0.58–1.38 |
+  | column 1 → 3 | 3.69 | 1.49 | 0.84 | 1.42 |
+  | column 3 → 1 | 6.71 | 1.35 | 0.88 | 1.43 |
+  | column 1 → 3, far | 3.35 | 1.45 | 0.84 | 1.72 |
+  | column 3 → 1, far | 9.12 | 1.34 | 0.90 | 1.43 |
+  | next column (four jumps) | 0.61–1.19 | same | 0.61–0.87 | 0.61–1.27 |
+
+  A move to the next column usually keeps the player, but 13 of 80 such trials
+  lost them for more than 2 s before (slowest 4.46 s); with the search the
+  slowest is 1.92 s. Full tables, the per-box timeline and the time budget are
+  in `docs/jump-bench-2026-10-02.md`.
 
   Not measured on hardware. The simulator has no Wi-Fi delay and sees a player
   anywhere inside the ±20° beam model; if a real box steps over the player,
   lower `search_step_deg` (10) in the config.
+- Tools: `python3 -m tools.jump_bench` runs these jumps in the simulator
+  (before, search, right hint, wrong hint) and prints the tables; `--csv`
+  writes one row per trial, `--timeline` what each box does after a jump.
 - Tests: `JumpTests` and `ExpectTests` in `tests/test_swarm.py`.
 
 ## 2026-10-01 — prototype config in the repository, phone hotspot only
