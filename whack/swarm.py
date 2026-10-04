@@ -114,11 +114,15 @@ class Estimate:
         self.confidence = 0.0
         self.contributors = 0                     # boxes behind the last accepted point
 
-    def plausible(self, point, stamp):
+    def plausible(self, point, stamp, contributors=1):
         """Whether the player could have reached `point` by `stamp` from the
-        current estimate. True when there is no recent estimate to compare."""
+        current estimate. True when there is no recent estimate to compare,
+        and for a fix from two or more boxes over one from a single box: the
+        single box only knew the bearing to within its beam."""
         g = self.g
         if self.point is None or stamp - self.last_good > g.local_search_s:
+            return True
+        if contributors >= 2 and self.contributors < 2:
             return True
         dt = max(stamp - self.last_good, 0.001)
         return math.dist(point, self.point) <= g.max_speed_m_s*dt + .3
@@ -126,11 +130,12 @@ class Estimate:
     def update(self, point, stamp, contributors):
         g = self.g
         recent = self.point is not None and stamp - self.last_good <= g.local_search_s
+        upgrade = contributors >= 2 and self.contributors < 2     # coarse fix replaced, not blended
         residual = 0.0
-        if recent:
+        if recent and not upgrade:
             dt = max(stamp - self.last_good, 0.001)
             residual = math.dist(point, self.point)
-            if not self.plausible(point, stamp):
+            if not self.plausible(point, stamp, contributors):
                 return False                      # nobody moves that fast: noise
             alpha = 1.0 if g.smoothing_tau_s == 0 else min(.9, max(.35, 1-math.exp(-dt/g.smoothing_tau_s)))
             # A single-box polar fix is coarse sideways: trust it less.
@@ -466,8 +471,10 @@ class SwarmController:
         if box.mode == "aimed" and estimate is not None and fresh:
             bearing = self._clamp_travel(box.node, g.angle(box.node, estimate))
             # A small change stays inside the beam: keep the bearing, and the
-            # firmware pings without waiting for the servo to settle.
-            if abs(bearing - box.bearing) <= round(g.aim_deadband_deg*1000):
+            # firmware pings without waiting for the servo to settle. Only for
+            # a fix from two or more boxes, which comes from their ranges: a
+            # one-box fix lies along its bearing, so that must follow.
+            if self.estimate.contributors >= 2 and abs(bearing - box.bearing) <= round(g.aim_deadband_deg*1000):
                 bearing = box.bearing
             box.aimed_bearing = bearing
             return bearing
@@ -502,8 +509,7 @@ class SwarmController:
         | ('background', d) | ('static', d) | ('none', None)."""
         g = self.geometry
         if message.status != "OK":
-            box.last_reading = None
-            return "none", None
+            return "none", None          # a missed ping keeps the last echo: the sensor does miss a person
         d = message.distance_mm/1000
         if d < g.min_player_range_m:
             return "close", d
@@ -612,7 +618,8 @@ class SwarmController:
         """The point most boxes agree on: the largest group whose ranges meet
         within RESIDUAL_M and whose beams all point at the fused spot. Among
         equal groups, one the player could have reached comes first, then one
-        holding the newest echo (so real movement is followed at once).
+        holding the newest echo. When no two boxes agree the newest echo is
+        taken, so real movement is followed at once.
         Returns (point, group)."""
         g = self.geometry
         for size in range(len(contributions), 0, -1):
@@ -626,8 +633,10 @@ class SwarmController:
                             self._in_beam(c.node, c.bearing, point, c.range_m - g.body_radius_m) for c in group):
                         continue
                 options.append((point, group))
+            if options and size == 1:
+                return newest.point, (newest,)        # nobody agrees: an old lone echo cannot outvote a new one
             if options:
-                return min(options, key=lambda o: (not self.estimate.plausible(o[0], newest.time),
+                return min(options, key=lambda o: (not self.estimate.plausible(o[0], newest.time, len(o[1])),
                                                    newest not in o[1]))
         return newest.point, (newest,)
 
@@ -661,8 +670,7 @@ class SwarmController:
                 continue                      # let the jitter finish before deciding
             elif box.mode == "sweep" and not moved and now < box.aim_cooldown_until:
                 continue                      # it already looked there and found nothing
-            elif box.hold_bearing is not None and box.dissent_since is not None \
-                    and now - box.dissent_since <= self.DISSENT_HOLD_S:
+            elif box.dissent_since is not None and now - box.dissent_since <= self.DISSENT_HOLD_S:
                 continue                      # still re-checking what only it sees
             else:
                 box.mode, box.jitter_index = "aimed", 0

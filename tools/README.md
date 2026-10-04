@@ -49,6 +49,24 @@ writes one row per trial and `--timeline` what each box does after one jump.
 The numbers repeat exactly and say nothing about Wi-Fi delay or real echoes.
 Recorded results: [jump benchmark, 2 October](../docs/jump-bench-2026-10-02.md).
 
+## Compare trackers (simulator)
+
+```bash
+python3 -m tools.compare_trackers                      # 3191700 vs aee8ef0 vs the working tree
+python3 -m tools.compare_trackers 3191700 HEAD --miss .3 --edge .6
+```
+
+Loads `whack/swarm.py` from each git commit named (or `worktree`) and runs them
+on the same scenes and seeds: standing still on the 15 holes of the 5 October
+field with its static echo and missed pings, the jump benchmark, and a walk
+across. Simulation only; it compares how trackers treat the same echoes.
+
+To compare on the boxes, record every range reply as well as the snapshots:
+
+```bash
+python3 -m whack --tracker swarm --config config.prototype.json --record results/run.csv --record-pings results/run-pings.csv
+```
+
 ## UDP sensor emulator
 
 `simulate_nodes.py` runs two independent UDP endpoints with the same messages as the ESP32 firmware. Use it to exercise discovery, network acquisition, tracking, and disconnection without physical sensors:

@@ -100,8 +100,9 @@ class Geometry:
     jitter_s: float = 1.0
     # An aimed box keeps its bearing while the estimate moves less than this
     # off it: the beam is far wider, and an unchanged bearing needs no servo
-    # settle, so the box pings sooner. 0 = re-aim on every change.
-    aim_deadband_deg: float = 3.0
+    # settle, so the box pings sooner. 0 = re-aim on every change (default:
+    # in simulation the shared acoustic slot, not the settle, limits the rate).
+    aim_deadband_deg: float = 0.0
     # Two reliable detections further apart than this are two bodies.
     two_player_separation_m: float = 0.6
     # Node that carries the near-wall warning buzzer; -1 = no buzzer. Not a

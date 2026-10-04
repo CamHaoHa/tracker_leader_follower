@@ -10,6 +10,7 @@ from pathlib import Path
 from whack.swarm import SwarmController, fuse, Contribution
 from whack.tracking import Geometry, load_geometry
 from whack.transport import SimulatedTransport
+from whack.protocol import Range
 
 
 class Clock:
@@ -605,6 +606,142 @@ class CalibrationTests(unittest.TestCase):
                 loaded = SwarmController(after, clock=clock, transport=t, calibration_path=path)
                 self.assertEqual(loaded.background, background)
                 self.assertEqual(loaded.calibration_message, "")
+
+
+def ping(node, bearing_deg, distance_m, status="OK"):
+    return Range(node, 1, round(bearing_deg*1000), round(distance_m*1000), status, 0, 0, 2)
+
+
+def three(**geometry):
+    return make(extra_sensor_x=(0.75,), **geometry)
+
+
+class ReliabilityTests(unittest.TestCase):
+    """Static echoes, agreement between boxes, confirmation and the aim deadband."""
+
+    def mapped(self):
+        c, clock, t = three()
+        c.background = {f"{n}:{b}": None for n in range(c.count) for b in c._grid(n)}
+        c.background["0:35000"] = 0.62               # box 0 hears the middle box here
+        return c, clock, t
+
+    def test_an_echo_of_a_mapped_object_is_rejected_beside_its_bearing(self):
+        c, clock, t = self.mapped()
+        kind, _ = c._classify(c.boxes[0], ping(0, 45, 0.63), 0.0)
+        self.assertEqual(kind, "static")
+        self.assertEqual(c.boxes[0].rejections["static"], 1)
+
+    def test_a_player_nearer_or_farther_than_the_object_still_counts(self):
+        c, clock, t = self.mapped()
+        for d in (0.40, 1.20):
+            c.boxes[0].last_reading = None
+            self.assertEqual(c._classify(c.boxes[0], ping(0, 45, d), 0.0)[0], "candidate", d)
+
+    def test_a_missed_ping_keeps_the_last_echo(self):
+        c, clock, t = three()
+        c._classify(c.boxes[0], ping(0, 60, 1.0), 0.0)
+        c._classify(c.boxes[0], ping(0, 60, 0, "TIMEOUT"), 0.1)
+        self.assertEqual(c._classify(c.boxes[0], ping(0, 60, 1.0), 0.2)[0], "reliable")
+
+    def contribution(self, c, node, point, time):
+        g = c.geometry
+        return Contribution(node, time, g.angle(node, point), math.dist(g.sensor_position(node), point), point)
+
+    def test_two_boxes_outvote_a_third(self):
+        c, clock, t = three()
+        player, ghost = (0.45, 1.4), (1.2, 1.0)
+        c._absorb(self.contribution(c, 1, player, 0.0), 0.0)
+        c._absorb(self.contribution(c, 2, player, 0.05), 0.05)
+        self.assertFalse(c._absorb(self.contribution(c, 0, ghost, 0.1), 0.1))
+        self.assertLess(math.dist(c.estimate.point, player), 0.05)
+        self.assertEqual(set(c.contributions), {1, 2})
+        self.assertEqual(c.reason, "Echo disagreed with the other boxes")
+
+    def test_circles_that_meet_outside_a_beam_are_not_fused(self):
+        c, clock, t = three()
+        g = c.geometry
+        point = (0.75, 1.5)
+        good = self.contribution(c, 1, point, 0.0)
+        # Box 0's range fits the point, but it was aimed 40 degrees away from it.
+        off = Contribution(0, 0.05, g.angle(0, point) + 40000, math.dist(g.sensor_position(0), point), point)
+        _, group = c._consensus([good, off], off)
+        self.assertEqual(len(group), 1)
+
+    def test_a_new_lone_echo_beats_an_old_lone_echo(self):
+        c, clock, t = three()
+        # The two circles cross at (0.75, 1.33), outside box 0's beam: no agreement.
+        c._absorb(self.contribution(c, 0, (0.2, 1.6), 0.0), 0.0)
+        moved = self.contribution(c, 2, (1.3, 1.6), 0.4)
+        self.assertTrue(c._absorb(moved, 0.4))
+        self.assertEqual(set(c.contributions), {2})
+
+    def test_a_rejected_jump_is_not_kept(self):
+        c, clock, t = three()
+        c._absorb(self.contribution(c, 0, (0.4, 1.2), 0.0), 0.0)
+        self.assertFalse(c._absorb(self.contribution(c, 0, (1.4, 1.9), 0.02), 0.02))
+        self.assertEqual(c.reason, "Position jumped")
+        self.assertLess(math.dist(c.contributions[0].point, (0.4, 1.2)), 1e-9)
+
+    def test_a_two_box_fix_replaces_a_one_box_fix_far_from_it(self):
+        c, clock, t = three()
+        c._absorb(self.contribution(c, 0, (0.3, 1.6), 0.0), 0.0)        # coarse: off sideways
+        c._absorb(self.contribution(c, 1, (0.75, 1.4), 0.02), 0.02)
+        self.assertTrue(c._absorb(self.contribution(c, 2, (0.75, 1.4), 0.04), 0.04))
+        self.assertLess(math.dist(c.estimate.point, (0.75, 1.4)), 0.05)
+
+    def test_an_echo_that_fits_a_two_box_fix_needs_no_repeat(self):
+        c, clock, t = three()
+        player = (0.75, 1.4)
+        c._absorb(self.contribution(c, 0, player, 0.0), 0.0)
+        c._absorb(self.contribution(c, 2, player, 0.0), 0.0)
+        g = c.geometry
+        surface = math.dist(g.sensor_position(1), player) - g.body_radius_m
+        self.assertEqual(c._classify(c.boxes[1], ping(1, 90, surface), 0.1)[0], "reliable")
+        c.boxes[1].last_reading = None
+        self.assertEqual(c._classify(c.boxes[1], ping(1, 90, surface + 0.5), 0.1)[0], "candidate")
+
+    def test_one_box_never_confirms_itself_through_the_estimate(self):
+        c, clock, t = three()
+        c._absorb(self.contribution(c, 0, (0.75, 1.4), 0.0), 0.0)
+        surface = math.dist(c.geometry.sensor_position(1), (0.75, 1.4)) - c.geometry.body_radius_m
+        self.assertEqual(c._classify(c.boxes[1], ping(1, 90, surface), 0.1)[0], "candidate")
+
+    def test_the_deadband_keeps_a_bearing_only_for_a_two_box_fix(self):
+        c, clock, t = three(aim_deadband_deg=3)
+        box = c.boxes[1]
+        box.mode, box.bearing = "aimed", 90000
+        c.estimate.point, c.estimate.last_good, c.estimate.contributors = (0.75 + 0.9*math.tan(math.radians(1)), 1.4), 0.0, 2
+        self.assertEqual(c._choose_bearing(box, 0.1), 90000)
+        c.estimate.point = (0.75 + 0.9*math.tan(math.radians(5)), 1.4)
+        self.assertNotEqual(c._choose_bearing(box, 0.1), 90000)
+        box.bearing, c.estimate.contributors = 90000, 1
+        c.estimate.point = (0.75 + 0.9*math.tan(math.radians(1)), 1.4)
+        self.assertNotEqual(c._choose_bearing(box, 0.1), 90000)
+
+    def test_a_player_standing_beside_a_heard_object_is_held(self):
+        # Box 0 hears an object 0.62 m away up to 47.5 degrees; the map has it at 30-35.
+        c, clock, t = three(sweep_bounds_deg=((30, 100), (30, 120), (80, 150)), servo_travel_deg=(30, 150))
+        c.background = {f"{n}:{b}": None for n in range(c.count) for b in c._grid(n)}
+        c.background["0:30000"] = c.background["0:35000"] = 0.62
+        g = c.geometry
+        player = (0.45, 1.42)
+
+        def target(now, node):
+            aim = t.angles[node]/1000
+            if node == 0 and aim <= 47.5:
+                a, reach = math.radians(aim), 0.62 + g.body_radius_m
+                return (reach*math.cos(a), g.sensor_y + reach*math.sin(a))
+            return player
+        t.target = target
+        poll_while(c, clock, 10, lambda snap: snap.position is not None and math.dist(snap.position, player) < .2)
+        losses, far, tracking = 0, 0, True
+        for _ in range(2000):
+            snap = c.poll(); clock.advance()
+            if (snap.state == "track") != tracking:
+                tracking = not tracking; losses += not tracking
+            far += snap.position is not None and math.dist(snap.position, player) > .35
+        self.assertEqual(losses, 0)
+        self.assertEqual(far, 0)
 
 
 class FuseTests(unittest.TestCase):

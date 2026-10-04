@@ -15,6 +15,11 @@ from .tracking import load_geometry
 CSV_FIELDS = (
     "elapsed_s", "x_m", "y_m", "fix_age_s", "in_bounds", "dead_zone",
     "state", "predicted", "confidence", "update_hz", "status", "nodes", "aim_x", "aim_y", "reason", "alert", "contributors")
+# --record-pings: one row per range reply. bearing in millidegrees, distance in mm,
+# stamp = estimated acquisition time; kind = reliable | candidate | hint | close |
+# background | static | none, as the tracker classified it.
+PING_FIELDS = ("elapsed_s", "node", "seq", "bearing_mdeg", "status", "distance_mm", "stamp_s",
+               "ping_mode", "box_mode", "kind")
 
 
 def _finite_age(snapshot):
@@ -45,6 +50,8 @@ def main(argv=None):
     parser.add_argument("--nodes", nargs="+", metavar="IP", help="Optional fixed node IPv4 addresses, left to right")
     parser.add_argument("--port", type=int, default=4210, help="Local UDP port; hardware discovery uses 4210")
     parser.add_argument("--record", help="Write timestamped tracking observations to a CSV file")
+    parser.add_argument("--record-pings", metavar="CSV",
+                        help="Swarm tracker: write every range reply and what the tracker made of it to a CSV file")
     parser.add_argument("--tracker", choices=("swarm", "pairs"), default="swarm",
                         help="swarm: independent sweeps, leader-follower aiming (default); pairs: paired two-box scheduler")
     args = parser.parse_args(argv)
@@ -52,6 +59,7 @@ def main(argv=None):
         parser.error("Require positive finite seconds and a port from 1 to 65535")
     controller = None
     logfile = None
+    pingfile = None
     try:
         controller = (SwarmController if args.tracker == "swarm" else Controller)(
             load_geometry(args.config), simulate=args.simulate, calibration_path=args.calibration,
@@ -62,6 +70,21 @@ def main(argv=None):
         )
         if args.calibrate:
             controller.start_calibration()
+        if args.record_pings:
+            if not hasattr(controller, "ping_log"):
+                parser.error("--record-pings needs --tracker swarm")
+            pingfile = open(args.record_pings, "w", newline="", encoding="utf-8")
+            ping_writer = csv.writer(pingfile)
+            ping_writer.writerow(PING_FIELDS)
+            ping_start = controller.clock()
+
+            def log_ping(now, box, message, stamp, txn_mode, kind):
+                ping_writer.writerow((round(now - ping_start, 4), box.node, message.seq, message.angle_mdeg,
+                                      message.status, message.distance_mm, round(stamp - ping_start, 4),
+                                      txn_mode, box.mode, kind))
+                pingfile.flush()
+
+            controller.ping_log = log_ping
         if args.record:
             logfile = open(args.record, "w", newline="", encoding="utf-8")
             writer = csv.writer(logfile)
@@ -125,6 +148,8 @@ def main(argv=None):
             controller.close()
         if logfile:
             logfile.close()
+        if pingfile:
+            pingfile.close()
 
 
 if __name__ == "__main__":
