@@ -1,3 +1,36 @@
+## 2026-10-05 — a player who stands still stays tracked
+
+- Problem, seen on the boxes: a player standing still on a hole was lost 14
+  times a minute and the cursor jumped up to 1.2 m. The empty-room map had the
+  outer boxes hearing something about 0.6 m away at the inner ends of their
+  arcs (box 0 at 30–35°, box 2 at 150°), most likely the middle box. Box 0
+  heard it a few degrees past the mapped bearings and took it for the player;
+  the newest reading overruled the two boxes that agreed; ranges alone made a
+  ghost where two circles of different objects crossed; and every missed ping
+  cost a box two or three pings before it counted again. Details and numbers:
+  [standing benchmark](stand-bench-2026-10-05.md).
+- Background: a reading is the room when the map has an echo within
+  `background_margin_m` of its range at its bearing or up to 10° either side
+  (`BACKGROUND_SPREAD_DEG`). A reading clearly farther than the mapped echo is
+  no longer thrown away: something behind the object answered.
+- Fusion: readings must agree, circles within `RESIDUAL_M` and the point
+  inside every box's beam (beam half-angle + 10°, `BEAM_SLACK_DEG`). A new
+  reading that agrees with nobody is outvoted by two boxes whose latest pings
+  still find the player where they agree he is ("(outvoted)" in the box
+  status, `rejections["outvoted"]`); otherwise the newest reading wins as
+  before, now together with any others that agree with it.
+- Confirmation: a missed ping or an echo of the room no longer erases a box's
+  last echo, and a reading confirms it at a bearing up to two jitter offsets
+  away (16°) instead of one sweep step (5°), same range within 0.10 m and
+  1.5 s as before.
+- Simulator (`tools/stand_bench.py`, new): standing on each of the 15 hole
+  positions with the evening's map, the object heard at the beam edge on 30 %
+  of pings and 15 % of pings at the player missed: losses 12.4 → 1.2 a
+  minute, cursor jumps 3.7 → 0 a minute, time on the hole 87 % → 99 %. The
+  jump benchmark is unchanged or faster with the mole hint.
+- Unchanged: ping schedule, jitter, search, `expect()`, jump gate, alerts,
+  protocol. No firmware change, no reflash. Not yet measured on the boxes.
+
 ## 2026-10-02 — search after a full loss, mole hint
 
 - Problem: when the player skipped a column (mole at column 1, then column 3)

@@ -3,6 +3,7 @@
 import json
 import math
 import tempfile
+from types import SimpleNamespace
 import unittest
 from dataclasses import asdict, replace
 from pathlib import Path
@@ -298,6 +299,148 @@ class ExpectTests(unittest.TestCase):
         self.assertIsNone(c.expected)
         c.expect(COLUMNS[3]); c.start_acquisition()              # a new search forgets it too
         self.assertIsNone(c.expected)
+
+
+def field_controller(background):
+    """A controller on the real-network path (the empty-room map is used) with a simulated transport."""
+    clock = Clock()
+    g = replace(load_geometry(str(PROTOTYPE)), sweep_bounds_deg=((30, 100), (30, 120), (80, 150)),
+                servo_travel_deg=(30, 150))
+    t = SimulatedTransport(clock, g)
+    with tempfile.TemporaryDirectory() as temp:
+        c = SwarmController(g, clock=clock, transport=t, calibration_path=Path(temp)/"none.json")
+    c.background = {f"{n}:{b}": None for n in range(c.count) for b in c._grid(n)}
+    c.background.update(background)
+    return c, clock, t
+
+
+def echo(degrees, metres, status="OK"):
+    return SimpleNamespace(status=status, distance_mm=round(metres*1000), angle_mdeg=round(degrees*1000))
+
+
+class StaticEchoTests(unittest.TestCase):
+    """An object of the empty-room map: box 0 heard 0.62 m at 30 and 35 degrees (the field on 5 October)."""
+
+    def setUp(self):
+        self.c, self.clock, _ = field_controller({"0:30000": .62, "0:35000": .62})
+        self.box = self.c.boxes[0]
+
+    def kind(self, degrees, metres):
+        return self.c._classify(self.box, echo(degrees, metres), self.clock.now)[0]
+
+    def test_the_object_is_background_at_its_bearings_and_next_to_them(self):
+        for degrees in (30, 33, 35, 41, 45):
+            with self.subTest(degrees=degrees):
+                self.assertEqual(self.kind(degrees, .62), "none")
+        self.assertEqual(self.kind(33, .70), "none")                 # within background_margin_m of it
+        self.assertEqual(self.box.rejections["background"], 6)
+
+    def test_further_round_or_further_out_it_is_something_else(self):
+        self.assertEqual(self.kind(46, .62), "candidate")            # more than 10 degrees from 35
+        self.assertEqual(self.kind(70, .62), "candidate")
+
+    def test_an_echo_beyond_the_object_is_not_background(self):
+        # The object did not answer this ping, so something behind it did:
+        # the player, 1.40 m away, where the old map test threw everything away.
+        self.assertEqual(self.kind(33, 1.40), "candidate")
+        self.assertEqual(self.kind(33, 1.41), "reliable")
+
+
+class ConfirmTests(unittest.TestCase):
+    def setUp(self):
+        self.c, self.clock, _ = field_controller({})
+        self.box = self.c.boxes[1]
+
+    def kind(self, degrees, metres, status="OK"):
+        self.clock.advance(.2)
+        return self.c._classify(self.box, echo(degrees, metres, status), self.clock.now)[0]
+
+    def test_a_missed_ping_does_not_forget_the_last_echo(self):
+        self.assertEqual(self.kind(90, .87), "candidate")
+        self.assertEqual(self.kind(90, 0, "TIMEOUT"), "none")
+        self.assertEqual(self.kind(90, .88), "reliable")
+
+    def test_a_reading_confirms_one_up_to_two_jitter_offsets_round(self):
+        self.assertEqual(self.c.confirm_mdeg, 16000)                # jitter_deg 8
+        self.assertEqual(self.kind(90, .87), "candidate")
+        self.assertEqual(self.kind(98, .87), "reliable")             # jittered one way
+        self.assertEqual(self.kind(82, .88), "reliable")             # and the other
+        self.assertEqual(self.kind(103, .88), "candidate")           # 21 degrees on
+        self.assertEqual(self.kind(103, 1.0), "candidate")           # another range
+
+    def test_an_old_echo_confirms_nothing(self):
+        self.assertEqual(self.kind(90, .87), "candidate")
+        self.clock.advance(1.5)
+        self.assertEqual(self.kind(90, .87), "candidate")
+
+
+class AgreementTests(unittest.TestCase):
+    PLAYER = (1.25, 1.42)                   # the hole the player stood on, in the tracker frame
+    OBJECT = (0.61, 1.01)                   # where box 0's echo of the object puts him: 0.80 m at 40 degrees
+
+    def setUp(self):
+        self.c, self.clock, _ = field_controller({})
+        self.clock.now = 10.0
+
+    def reading(self, node, point, bearing_towards=None, age=0.0):
+        g = self.c.geometry
+        aim = g.angle(node, bearing_towards or point)
+        return Contribution(node, self.clock.now - age, aim, math.dist(g.sensor_position(node), point), point)
+
+    def track_with_boxes_1_and_2(self):
+        for node in (1, 2):
+            self.assertTrue(self.c._absorb(self.reading(node, self.PLAYER, age=.1), self.clock.now))
+        self.assertEqual(set(self.c.contributions), {1, 2})
+        return self.c.estimate.point
+
+    def test_a_crossing_outside_a_beam_is_a_ghost(self):
+        g = self.c.geometry
+        # Box 0's 0.80 m circle crosses box 1's circle of the player at (0.07, 1.30):
+        # the ranges agree there, but box 0 was aimed at 40 degrees, not 85.
+        ghost = [self.reading(0, (0.067, 1.297), bearing_towards=self.OBJECT), self.reading(1, self.PLAYER)]
+        point, worst = fuse(g, ghost)
+        self.assertLess(worst, .05)
+        self.assertIsNone(self.c._agreement(ghost))
+        true = [self.reading(1, self.PLAYER), self.reading(2, self.PLAYER)]
+        self.assertLess(math.dist(self.c._agreement(true), self.PLAYER), .01)
+
+    def test_two_boxes_that_still_see_the_player_outvote_a_third(self):
+        before = self.track_with_boxes_1_and_2()
+        self.assertFalse(self.c._absorb(self.reading(0, self.OBJECT), self.clock.now))
+        self.assertEqual(self.c.estimate.point, before)
+        self.assertEqual(set(self.c.contributions), {1, 2})
+        self.assertEqual(self.c.boxes[0].rejections["outvoted"], 1)
+
+    def test_the_newest_reading_wins_when_the_others_have_missed_since(self):
+        self.track_with_boxes_1_and_2()
+        self.c.boxes[2].last_no_hit = self.clock.now          # box 2 lost him: he may have moved
+        self.assertTrue(self.c._absorb(self.reading(0, self.OBJECT), self.clock.now))
+        self.assertEqual(set(self.c.contributions), {0})
+
+    def test_a_reading_is_kept_with_the_boxes_it_agrees_with(self):
+        self.track_with_boxes_1_and_2()
+        moved = (1.20, 1.45)
+        self.c.contributions[2] = self.reading(2, self.OBJECT, age=.1)    # box 2's last reading was something else
+        self.assertTrue(self.c._absorb(self.reading(1, moved), self.clock.now))
+        self.assertTrue(self.c._absorb(self.reading(0, moved), self.clock.now))
+        self.assertEqual(set(self.c.contributions), {0, 1})
+
+
+class StandStillTests(unittest.TestCase):
+    """The player stands still where box 0 hears the middle box next to its mapped bearings (tools/stand_bench.py)."""
+
+    def test_the_player_is_held_while_standing_still(self):
+        from tools import stand_bench as bench
+        geometry = bench.field_geometry(str(PROTOTYPE))
+        spot = (1.25, 1.42)                         # the hole stood on in the field, tracker frame
+        after = [bench.stand("after", geometry, spot, 30, .15, .3, seed) for seed in range(3)]
+        before = [bench.stand("before", geometry, spot, 30, .15, .3, seed) for seed in range(3)]
+        self.assertLessEqual(bench.mean(after, "losses_per_min"), 2.0)
+        self.assertEqual(bench.mean(after, "jumps_per_min"), 0.0)
+        self.assertGreaterEqual(bench.mean(after, "on_hole"), .95)
+        # The scene reproduces what was seen on the boxes with the old tracker.
+        self.assertGreaterEqual(bench.mean(before, "losses_per_min"), 8.0)
+        self.assertGreater(bench.mean(before, "jumps_per_min"), 2.0)
 
 
 class AlertTests(unittest.TestCase):

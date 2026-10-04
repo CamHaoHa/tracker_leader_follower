@@ -49,6 +49,24 @@ writes one row per trial and `--timeline` what each box does after one jump.
 The numbers repeat exactly and say nothing about Wi-Fi delay or real echoes.
 Recorded results: [jump benchmark, 2 October](../docs/jump-bench-2026-10-02.md).
 
+## Standing benchmark (simulator)
+
+```bash
+python3 -m tools.stand_bench --csv results/stand-bench.csv
+python3 -m tools.stand_bench --miss 0.3 --edge 0.6
+```
+
+How well the swarm tracker holds a player who stands still on each hole of
+the game, in the field of 5 October 2026: that evening's arcs and empty-room
+map, in which the outer boxes hear something about 0.6 m away (most likely
+the middle box) at the inner ends of their arcs. The simulated boxes hear that
+object where the map has it and, on some pings (`--edge`), up to 10 degrees
+further in; and they miss the player on a share of pings (`--miss`). It
+prints losses and cursor jumps per minute and the time on the hole for the
+tracker before and after the change of 5 October. The echo model and both
+rates are assumptions. Recorded results:
+[standing benchmark, 5 October](../docs/stand-bench-2026-10-05.md).
+
 ## UDP sensor emulator
 
 `simulate_nodes.py` runs two independent UDP endpoints with the same messages as the ESP32 firmware. Use it to exercise discovery, network acquisition, tracking, and disconnection without physical sensors:
