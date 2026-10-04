@@ -298,8 +298,10 @@ No Wi-Fi credentials are needed in the Python application.
 The software implements scan, foreground filtering, aiming and dot rendering;
 physical player tracking has not yet been demonstrated with these mounts. Two
 broad ultrasonic beams can reflect off different body parts or furniture. Start
-with one person, slow movement and an uncluttered field. Initial acquisition and
-reacquisition can take a full sweep. Servo alignment and pulse-to-angle mapping
+with one person, slow movement and an uncluttered field. Initial acquisition can
+take a full sweep. After a loss every box first searches its arc in
+`search_step_deg` steps (15 degrees by default), which is quicker, and returns
+to the sweep if that finds nothing. Servo alignment and pulse-to-angle mapping
 are required for the geometry to make sense, even before measuring accuracy.
 The configured 20-degree beam half-angle is a model assumption, not a measured
 HC-SR04 characteristic. A narrower effective beam requires a narrower setting and

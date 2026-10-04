@@ -1,3 +1,87 @@
+## 2026-10-05 — a player who stands still stays tracked
+
+- Problem, seen on the boxes: a player standing still on a hole was lost 14
+  times a minute and the cursor jumped up to 1.2 m. The empty-room map had the
+  outer boxes hearing something about 0.6 m away at the inner ends of their
+  arcs (box 0 at 30–35°, box 2 at 150°), most likely the middle box. Box 0
+  heard it a few degrees past the mapped bearings and took it for the player;
+  the newest reading overruled the two boxes that agreed; ranges alone made a
+  ghost where two circles of different objects crossed; and every missed ping
+  cost a box two or three pings before it counted again. Details and numbers:
+  [standing benchmark](stand-bench-2026-10-05.md).
+- Background: a reading is the room when the map has an echo within
+  `background_margin_m` of its range at its bearing or up to 10° either side
+  (`BACKGROUND_SPREAD_DEG`). A reading clearly farther than the mapped echo is
+  no longer thrown away: something behind the object answered.
+- Fusion: readings must agree, circles within `RESIDUAL_M` and the point
+  inside every box's beam (beam half-angle + 10°, `BEAM_SLACK_DEG`). A new
+  reading that agrees with nobody is outvoted by two boxes whose latest pings
+  still find the player where they agree he is ("(outvoted)" in the box
+  status, `rejections["outvoted"]`); otherwise the newest reading wins as
+  before, now together with any others that agree with it.
+- Confirmation: a missed ping or an echo of the room no longer erases a box's
+  last echo, and a reading confirms it at a bearing up to two jitter offsets
+  away (16°) instead of one sweep step (5°), same range within 0.10 m and
+  1.5 s as before.
+- Simulator (`tools/stand_bench.py`, new): standing on each of the 15 hole
+  positions with the evening's map, the object heard at the beam edge on 30 %
+  of pings and 15 % of pings at the player missed: losses 12.4 → 1.2 a
+  minute, cursor jumps 3.7 → 0 a minute, time on the hole 87 % → 99 %. The
+  jump benchmark is unchanged or faster with the mole hint.
+- Unchanged: ping schedule, jitter, search, `expect()`, jump gate, alerts,
+  protocol. No firmware change, no reflash. Not yet measured on the boxes.
+
+## 2026-10-02 — search after a full loss, mole hint
+
+- Problem: when the player skipped a column (mole at column 1, then column 3)
+  the tracker needed seconds to find them again. All three boxes were aimed at
+  the old spot and missed together; each then dithered ±8° round that empty spot
+  for `jitter_s` (1 s) and only then resumed its 5° sweep from the old bearing,
+  in whichever direction it had last swept, sometimes out to the end stop first.
+  The boxes only obey `AIM`/`FIRE`, so this is laptop logic in `whack/swarm.py`.
+- Swarm tracker: when no box has seen the player for `local_search_s` (the
+  existing "Player lost" moment) every box stops its jitter and searches: steps
+  of `search_step_deg` (new setting, default 15, between `sweep_step_deg` and
+  45), first toward the middle of the field, once out to each end of its arc,
+  then the plain 5° sweep again. Search bearings stay on the sweep grid, so a
+  saved calibration map remains valid. `search_step_deg` equal to
+  `sweep_step_deg` searches in plain sweep steps.
+- Unchanged: one box missing while another still tracks (jitter 1 s, sweep,
+  2 s re-aim cooldown), the first sweep after Search/Reset, the two-ping
+  confirmation of an echo, the ping schedule. No firmware change, no reflash.
+- New `SwarmController.expect(point)`: the game says where it expects the
+  player, e.g. the column the mole moved to. After a full loss each box looks
+  there first, then searches as above. It is never reported as a position; a
+  fix still needs a reliable echo. `None` or a point outside the field
+  withdraws it, and Search/Reset forgets it. The game repository does not call
+  it yet.
+- Status line while searching shows `search` instead of `sweep` for a box that
+  is in the search pass.
+- Simulator, `config.prototype.json`, median seconds from the jump to the first
+  fix within 0.25 m over 20 jump moments (10 ms poll; player 0.6 m from the
+  sensor line, "far" 1.2 m):
+
+  | Jump | Before | Search | Search + right hint | Search + wrong hint |
+  |---|---|---|---|---|
+  | column 1 → 3 | 3.69 | 1.49 | 0.84 | 1.42 |
+  | column 3 → 1 | 6.71 | 1.35 | 0.88 | 1.43 |
+  | column 1 → 3, far | 3.35 | 1.45 | 0.84 | 1.72 |
+  | column 3 → 1, far | 9.12 | 1.34 | 0.90 | 1.43 |
+  | next column (four jumps) | 0.61–1.19 | same | 0.61–0.87 | 0.61–1.27 |
+
+  A move to the next column usually keeps the player, but 13 of 80 such trials
+  lost them for more than 2 s before (slowest 4.46 s); with the search the
+  slowest is 1.92 s. Full tables, the per-box timeline and the time budget are
+  in `docs/jump-bench-2026-10-02.md`.
+
+  Not measured on hardware. The simulator has no Wi-Fi delay and sees a player
+  anywhere inside the ±20° beam model; if a real box steps over the player,
+  lower `search_step_deg` (10) in the config.
+- Tools: `python3 -m tools.jump_bench` runs these jumps in the simulator
+  (before, search, right hint, wrong hint) and prints the tables; `--csv`
+  writes one row per trial, `--timeline` what each box does after a jump.
+- Tests: `JumpTests` and `ExpectTests` in `tests/test_swarm.py`.
+
 ## 2026-10-01 — prototype config in the repository, phone hotspot only
 
 - Config: `config.prototype.json` is the tracked field setup of the three-box
