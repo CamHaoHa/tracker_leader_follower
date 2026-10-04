@@ -98,6 +98,10 @@ class Geometry:
     # Dither around the aimed bearing after a miss, then resume sweeping.
     jitter_deg: float = 8.0
     jitter_s: float = 1.0
+    # An aimed box keeps its bearing while the estimate moves less than this
+    # off it: the beam is far wider, and an unchanged bearing needs no servo
+    # settle, so the box pings sooner. 0 = re-aim on every change.
+    aim_deadband_deg: float = 3.0
     # Two reliable detections further apart than this are two bodies.
     two_player_separation_m: float = 0.6
     # Node that carries the near-wall warning buzzer; -1 = no buzzer. Not a
@@ -141,6 +145,7 @@ class Geometry:
                 and 0.3 <= self.reliable_range_m <= 4
                 and 0.02 <= self.min_player_range_m <= 0.5 and 0 <= self.background_margin_m <= 1
                 and 0 <= self.jitter_deg <= 45 and 0 <= self.jitter_s <= 5
+                and 0 <= self.aim_deadband_deg <= 10
                 and 0.2 <= self.two_player_separation_m <= 3):
             raise ValueError("Invalid sweep, range or jitter limits")
         if type(self.buzzer_node) is not int or not -1 <= self.buzzer_node < self.sensor_count:

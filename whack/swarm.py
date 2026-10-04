@@ -40,6 +40,7 @@ schedule. The box silences itself if the laptop stops asking.
 from __future__ import annotations
 
 from collections import deque
+from itertools import combinations
 from dataclasses import asdict, dataclass, field
 import json
 import math
@@ -83,6 +84,7 @@ class Box:
     aimed_bearing: int = 90000
     aimed_point: tuple | None = None    # estimate this box was last sent to look at
     aim_cooldown_until: float = float("-inf")  # after a failed jitter, sweep at least until then
+    dissent_since: float | None = None  # when this box began seeing something the others do not
     search: bool = False                # after a full loss: sweep in search steps
     search_bounces: int = 0             # ends of the arc reached by this search; it stops at two
     rejections: dict = field(default_factory=dict)  # reason -> count, diagnostics
@@ -110,6 +112,16 @@ class Estimate:
         self.point = None
         self.last_good = float("-inf")
         self.confidence = 0.0
+        self.contributors = 0                     # boxes behind the last accepted point
+
+    def plausible(self, point, stamp):
+        """Whether the player could have reached `point` by `stamp` from the
+        current estimate. True when there is no recent estimate to compare."""
+        g = self.g
+        if self.point is None or stamp - self.last_good > g.local_search_s:
+            return True
+        dt = max(stamp - self.last_good, 0.001)
+        return math.dist(point, self.point) <= g.max_speed_m_s*dt + .3
 
     def update(self, point, stamp, contributors):
         g = self.g
@@ -118,7 +130,7 @@ class Estimate:
         if recent:
             dt = max(stamp - self.last_good, 0.001)
             residual = math.dist(point, self.point)
-            if residual > g.max_speed_m_s*dt + .3:
+            if not self.plausible(point, stamp):
                 return False                      # nobody moves that fast: noise
             alpha = 1.0 if g.smoothing_tau_s == 0 else min(.9, max(.35, 1-math.exp(-dt/g.smoothing_tau_s)))
             # A single-box polar fix is coarse sideways: trust it less.
@@ -128,6 +140,7 @@ class Estimate:
                      self.point[1] + alpha*(point[1]-self.point[1]))
         self.point = point
         self.last_good = stamp
+        self.contributors = contributors
         self.confidence = max(.1, min(1.0, 1.0-residual/.5)) * (1.0 if contributors >= 2 else .5)
         return True
 
@@ -176,6 +189,7 @@ class SwarmController:
     FUSE_WINDOW_S = .6          # contributions this fresh are combined
     REAIM_COOLDOWN_S = 2.0      # a box that jittered without success sweeps this long
     REAIM_MOVE_M = .3           # unless the estimate moved at least this far
+    DISSENT_HOLD_S = 1.5        # a sweeping box re-checks an outvoted echo this long
     CONSISTENT_M = .10          # repeated reading tolerance
     RESIDUAL_M = .30            # a contribution further off than this is another object
     OUTSIDE_MARGIN_M = .10
@@ -226,6 +240,7 @@ class SwarmController:
         self.paused = self.idle_after_calibration = bool(start_paused)
         self.calibration_path = Path(calibration_path)
         self.background = {}
+        self.ping_log = None            # called with every range taken while tracking, see __main__
         self.calibrating = False
         self.calibration_samples = {}
         self.calibration_message = ""
@@ -352,6 +367,7 @@ class SwarmController:
         self.expected = None
         for box in self.boxes:
             box.mode, box.hold_bearing, box.last_reading = "sweep", None, None
+            box.dissent_since = None
             box.search = False
 
     def _cancel_all(self):
@@ -448,8 +464,13 @@ class SwarmController:
         estimate = self.estimate.point
         fresh = now - self.estimate.last_good <= g.local_search_s
         if box.mode == "aimed" and estimate is not None and fresh:
-            box.aimed_bearing = self._clamp_travel(box.node, g.angle(box.node, estimate))
-            return box.aimed_bearing
+            bearing = self._clamp_travel(box.node, g.angle(box.node, estimate))
+            # A small change stays inside the beam: keep the bearing, and the
+            # firmware pings without waiting for the servo to settle.
+            if abs(bearing - box.bearing) <= round(g.aim_deadband_deg*1000):
+                bearing = box.bearing
+            box.aimed_bearing = bearing
+            return bearing
         if box.mode == "jitter":
             if now - box.jitter_started <= g.jitter_s:
                 offsets = (0, round(g.jitter_deg*1000), -round(g.jitter_deg*1000))
@@ -477,7 +498,8 @@ class SwarmController:
         return self.background.get(f"{node}:{best}"), True
 
     def _classify(self, box, message, now):
-        """Return ('reliable', d) | ('candidate', d) | ('hint', d) | ('close', d) | ('none', None)."""
+        """Return ('reliable', d) | ('candidate', d) | ('hint', d) | ('close', d)
+        | ('background', d) | ('static', d) | ('none', None)."""
         g = self.geometry
         if message.status != "OK":
             box.last_reading = None
@@ -485,12 +507,19 @@ class SwarmController:
         d = message.distance_mm/1000
         if d < g.min_player_range_m:
             return "close", d
-        if self.background and not self.simulate:
+        if self.background:
             baseline, known = self._background_at(box.node, message.angle_mdeg)
             if known and baseline is not None and d >= baseline - g.background_margin_m:
                 box.rejections["background"] = box.rejections.get("background", 0) + 1
                 box.last_reading = None
-                return "none", d
+                return "background", d
+        agrees = self._agrees(box.node, message.angle_mdeg, d, now)
+        if self.background and not agrees and self._static_echo(box.node, message.angle_mdeg, d):
+            # Something in the empty room sits at this range inside the beam
+            # (another box, a table leg): an echo off it is not the player.
+            box.rejections["static"] = box.rejections.get("static", 0) + 1
+            box.last_reading = None
+            return "static", d
         if d > g.reliable_range_m:
             box.last_reading = None
             return "hint", d
@@ -499,7 +528,40 @@ class SwarmController:
         if last and abs(last[0]-message.angle_mdeg) <= self.step_mdeg and abs(last[1]-d) <= self.CONSISTENT_M \
                 and now - last[2] <= 1.5:
             return "reliable", d
+        if agrees:
+            return "reliable", d            # another box already confirmed this spot: no repeat ping
         return "candidate", d
+
+    def _static_echo(self, node, bearing, d):
+        """Whether `d` matches an empty-room echo anywhere inside the beam. The
+        map is taken one bearing at a time, but the beam hears a static object
+        from well beside the bearing it was mapped at."""
+        g = self.geometry
+        half = g.beam_half_angle_deg*1000
+        for b in self._grid(node):
+            if abs(b - bearing) <= half:
+                v = self.background.get(f"{node}:{b}")
+                if v is not None and v <= g.reliable_range_m + g.background_margin_m \
+                        and abs(d - v) <= g.background_margin_m:
+                    return True
+        return False
+
+    def _in_beam(self, node, bearing, point, surface_m):
+        """Whether `point` can have answered a ping at `bearing`. A shoulder can
+        sit at the beam edge with the body centre just outside it, so the cone
+        is widened by the body's angular half-size (as in tracking.Tracker)."""
+        g = self.geometry
+        body = math.degrees(math.atan2(g.body_radius_m, max(surface_m, .05)))
+        return abs(g.angle(node, point) - bearing) <= (g.beam_half_angle_deg + body)*1000
+
+    def _agrees(self, node, bearing, d, now):
+        """Whether an echo fits the current estimate, made by two or more
+        boxes and still fresh: then it needs no repeat to be believed."""
+        e = self.estimate
+        if e.point is None or e.contributors < 2 or now - e.last_good > self.geometry.local_search_s:
+            return False
+        point, _ = self._polar(node, bearing, d)
+        return math.dist(point, e.point) <= self.RESIDUAL_M and self._in_beam(node, bearing, e.point, d)
 
     def _polar(self, node, bearing, distance_m):
         g = self.geometry
@@ -514,6 +576,8 @@ class SwarmController:
             self._calibration_sample(box, message)
             return
         kind, d = self._classify(box, message, now)
+        if self.ping_log:
+            self.ping_log(now, box, message, stamp, txn_mode, kind)
         box.status = f"{d:.2f} m" if d is not None else message.status.lower()
         if kind == "close":
             box.status = f"{d:.2f} m TOO CLOSE"
@@ -531,30 +595,61 @@ class SwarmController:
             self._on_miss(box, txn_mode, now)
             return
         point, r = self._polar(box.node, message.angle_mdeg, d)
-        box.last_hit = now
         contribution = Contribution(box.node, stamp, message.angle_mdeg, r, point)
-        self._absorb(contribution, now)
+        if self._absorb(contribution, now):
+            box.last_hit, box.dissent_since = now, None
+        elif box.mode == "sweep":
+            # It found something else while sweeping: look again for a while,
+            # so a second player keeps disagreeing and is reported, then move
+            # on, so a reflection cannot hold the box.
+            box.dissent_since = box.dissent_since if box.dissent_since is not None else now
+            if now - box.dissent_since <= self.DISSENT_HOLD_S:
+                box.hold_bearing = message.angle_mdeg
+        else:
+            self._on_miss(box, txn_mode, now)      # outvoted or implausible: not the player
+
+    def _consensus(self, contributions, newest):
+        """The point most boxes agree on: the largest group whose ranges meet
+        within RESIDUAL_M and whose beams all point at the fused spot. Among
+        equal groups, one the player could have reached comes first, then one
+        holding the newest echo (so real movement is followed at once).
+        Returns (point, group)."""
+        g = self.geometry
+        for size in range(len(contributions), 0, -1):
+            options = []
+            for group in combinations(contributions, size):
+                if size == 1:
+                    point = group[0].point            # polar fix: on its own bearing by construction
+                else:
+                    point, worst = fuse(g, list(group))
+                    if worst > self.RESIDUAL_M or not all(
+                            self._in_beam(c.node, c.bearing, point, c.range_m - g.body_radius_m) for c in group):
+                        continue
+                options.append((point, group))
+            if options:
+                return min(options, key=lambda o: (not self.estimate.plausible(o[0], newest.time),
+                                                   newest not in o[1]))
+        return newest.point, (newest,)
 
     def _absorb(self, contribution, now):
+        """Fold one reliable echo into the estimate. False when it was outvoted
+        by the other boxes or is a jump nobody can make; it is then not kept,
+        so it cannot pull the next fusion either."""
         g = self.geometry
         fresh = {n: c for n, c in self.contributions.items() if now - c.time <= self.FUSE_WINDOW_S}
         fresh[contribution.node] = contribution
-        if len(fresh) >= 2:
-            point, worst = fuse(g, list(fresh.values()))
-            if worst > self.RESIDUAL_M:
-                # Inconsistent boxes: keep the newest, drop the others, note it.
-                others = [c for c in fresh.values() if c.node != contribution.node]
-                spread = max(math.dist(contribution.point, c.point) for c in others)
-                if spread >= g.two_player_separation_m:
-                    self.inconsistent.append(now)
-                fresh = {contribution.node: contribution}
-                point, worst = contribution.point, 0.0
-        else:
-            point, worst = contribution.point, 0.0
-        self.contributions = fresh
-        if not self.estimate.update(point, contribution.time, len(fresh)):
+        point, group = self._consensus(list(fresh.values()), contribution)
+        dropped = [c for c in fresh.values() if c not in group]
+        if dropped and max(math.dist(c.point, point) for c in dropped) >= g.two_player_separation_m:
+            self.inconsistent.append(now)
+        if contribution not in group:
+            self.contributions = {c.node: c for c in group}
+            self.reason = "Echo disagreed with the other boxes"
+            return False
+        if not self.estimate.update(point, contribution.time, len(group)):
             self.reason = "Position jumped"
-            return
+            return False
+        fresh = self.contributions = {c.node: c for c in group}
         self.good_times.append(contribution.time)
         self.reason = "Tracking" if len(fresh) >= 2 else "Tracking (one box)"
         self.state = "track"
@@ -566,11 +661,15 @@ class SwarmController:
                 continue                      # let the jitter finish before deciding
             elif box.mode == "sweep" and not moved and now < box.aim_cooldown_until:
                 continue                      # it already looked there and found nothing
+            elif box.hold_bearing is not None and box.dissent_since is not None \
+                    and now - box.dissent_since <= self.DISSENT_HOLD_S:
+                continue                      # still re-checking what only it sees
             else:
                 box.mode, box.jitter_index = "aimed", 0
             box.search = False
             box.aimed_bearing = self._clamp_travel(box.node, g.angle(box.node, point))
             box.aimed_point = point
+        return True
 
     def _on_miss(self, box, txn_mode, now):
         """A ping planned in `txn_mode` found nothing. Sweep pings just move on."""
