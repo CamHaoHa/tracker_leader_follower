@@ -45,4 +45,4 @@ On a different machine, install `tools/requirements-sensor-test.txt` in a Python
 virtual environment. API references: [pySerial](https://pyserial.readthedocs.io/en/latest/pyserial_api.html)
 and [openpyxl](https://openpyxl.readthedocs.io/en/stable/tutorial.html).
 
-The first physical batch is recorded in `20260914_215543_sensor-A_25cm_cd1e33df`: sensor A at 25 cm, 30 attempts. An earlier empty timeout run is preserved separately. Software test fixtures are kept in temporary directories, not this evidence folder.
+The first physical batch is recorded in `week8/`: sensor A at 25 cm, 30 attempts. An earlier empty timeout run is preserved separately. Software test fixtures are kept in temporary directories, not this evidence folder.

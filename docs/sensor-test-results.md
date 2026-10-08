@@ -67,7 +67,7 @@ Rows marked Pending are planned tests, not completed results. Completed rows lin
 
 ## Raw readings
 
-First batch: [sensor A at 25 cm](../evidence/20260914_215543_sensor-A_25cm_cd1e33df/results.xlsx), 30 consecutive numerical returns. Raw CSV and serial log are retained beside the Excel report. Next batch: sensor A at a measured 50 cm.
+First batch: [sensor A at 25 cm](../evidence/week8/results.xlsx), 30 consecutive numerical returns. Raw CSV and serial log are retained beside the Excel report. Next batch: sensor A at a measured 50 cm.
 
 ## Requested bench-test range limit
 
@@ -86,7 +86,7 @@ First batch: [sensor A at 25 cm](../evidence/20260914_215543_sensor-A_25cm_cd1e3
 
 ## Sensor A at 50 cm — first capture
 
-- Evidence: [Excel report](../evidence/20260914_215833_sensor-A_50cm_f1ec5aa8/results.xlsx), with raw CSV and serial log alongside.
+- Evidence: [Excel report](../evidence/week7/results.xlsx), with raw CSV and serial log alongside.
 - 30/30 numerical returns; no error statuses. Mean 54.6267 cm, bias +4.6267 cm, sample SD 7.0197 cm, range 48.0–68.0 cm, MAE 5.3733 cm. Recomputed mean from CSV agrees with run.json.
 - First five readings were 67.2–68.0 cm, then readings declined progressively toward 50 cm and ended around 49 cm. Movement or changing reflection is a possible explanation; cause is unconfirmed. Do not infer a fixed +4.63 cm calibration offset from this run.
 - Keep the complete run as evidence. Repeat at a physically measured 50 cm with sensor and target secured and motionless before starting the command. Do not retrospectively select only the last readings.
