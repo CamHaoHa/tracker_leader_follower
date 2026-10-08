@@ -1,113 +1,235 @@
 # Two-node body tracker
 
 Track one person with **two ESP32s, two positional servos and two ultrasonic
-sensors**. Each servo aims one sensor. The PC coordinates wireless measurements,
-calculates the position and displays a **cyan dot on a black screen**.
+sensors**. Each servo aims one sensor. The laptop coordinates the two units,
+estimates position and velocity, and displays **one cyan spot on a black screen**.
+There is no gameplay logic.
 
-This project currently covers the hardware tracking subsystem and visualizer.
-Gameplay is deferred. Board, sensor and servo models still need confirmation;
-the defaults target classic ESP32 DevKit boards and trigger/echo ultrasonic
-sensors such as the assignment's RCWL-1601.
+The tracking workflow is implemented for software testing: empty-field
+calibration, centre acquisition or full-field search, confirmation, predictive
+following, local recovery and loss handling. **Physical moving-player tracking
+and end-to-end delay have not yet been validated.** The simulator uses an ideal
+point reflector and cannot establish how accurately ultrasound follows a body.
 
-## Try the visualizer
+The current hardware is two Freenove ESP32-WROOM-32E boards with an HC-SR04 and
+positional servo on each. Current pins are servo GPIO25, TRIG GPIO32 and ECHO
+GPIO35 through the voltage divider. Measure the mounting geometry and calibrate
+the servo direction, travel and loaded settling time before running a sweep.
 
-Python 3.10+ with Tk is required (included in the standard Windows Python
-installer; Linux may need its `python3-tk` package). No third-party runtime
-Python libraries are required.
+For the current 30–150° servo limits, follow the [first live test guide](docs/first-live-test.md)
+using the dedicated farther-back test field.
 
-```bash
-python -m whack --simulate
-```
+## Try the single-spot display
 
-Move the mouse across the window to move an ideal virtual reflector. The
-simulation includes servo delays, alternating pings and beam visibility; it
-cannot validate reflections from a human, wiring, mechanics or radio behaviour.
-Press **C** to calibrate an empty area in hardware mode, **D** for diagnostics,
-**F11** for fullscreen, and **Escape** to close.
-
-A diagnostic run without a display:
+Python 3.10+ with Tk is required. Linux may need `python3-tk`; no third-party
+Python runtime libraries are required.
 
 ```bash
-python -m whack --simulate --headless --seconds 5
+python3 -m whack --simulate
 ```
 
-## Connect the hardware
+Wait for the simulated centre target to lock, then move the mouse within the
+window. The simulator models servo settling, alternating pings and beam
+visibility. A solid spot represents a measured estimate; a dim hollow spot
+represents a short prediction. Missing, expired or out-of-field estimates are
+hidden. There are no extra target dots, collision alarms or game zones.
 
-1. Build two boxes, each with an ESP32, a positional pan servo and a sensor.
-   Follow [wiring and firmware setup](firmware/README.md). Set Wi-Fi credentials
-   in the ignored `firmware/include/config.local.h`.
-2. From `firmware/`, use PlatformIO to upload `node_left` to the left ESP32 and
-   `node_right` to the right ESP32. Do not flash both with the same node ID.
-3. Place sensors at the same height and depth, aimed horizontally at torso
-   height. Default acoustic centres are `(0, 0.20)` and `(1.50, 0.20)` metres;
-   the wall is `y=0`. Measure and configure the actual geometry.
-4. Copy `config.example.json` to `config.local.json`. Set measured positions,
-   range corrections and tracking limits. Calibrate servo direction, centre
-   and pulse endpoints in the firmware before fitting the loaded bracket.
-5. Connect the PC and both ESP32s to the same 2.4 GHz local network, disable
-   wireless client isolation and allow local inbound UDP 4210 on the PC.
-6. Run the visualizer, clear the area, then press **C**. Calibration has a
-   three-second lead-in and measures 20 aim points three times. Keep the whole
-   area empty until it finishes. Walk into the area and watch the dot.
+| Control | Action |
+| --- | --- |
+| **C** | Calibrate the empty field in hardware mode |
+| **Space / R** | Restart player acquisition using the selected start mode |
+| **D** | Show sensor status, fix age, confidence and fresh measurement rate |
+| **F11** | Toggle fullscreen |
+| **Escape** | Close |
+
+The screen polls at a 16 ms interval. Diagnostics report the observed display
+refresh rate separately from fresh position updates; screen refresh is not
+sensor measurement rate.
+
+For diagnostics without a window:
 
 ```bash
-python -m whack --config config.local.json
+python3 -m whack --simulate --headless --seconds 5
 ```
 
-If broadcast discovery is blocked, specify the addresses printed on USB serial:
+## Prepare and upload both ESP32s
+
+The user uploads firmware manually. Preparing the Arduino folders or starting
+the Python application does not flash a board.
+
+1. Wire each ESP32, servo and HC-SR04 using [firmware setup](firmware/README.md).
+2. Run `python3 -m tools.prepare_tracker_firmware --network tracker` from the
+   project root to prepare both boards for their own **TrackerNet** Wi-Fi.
+   Open the generated `tracker_left` and `tracker_right` sketches in Arduino IDE.
+3. Check each servo's calibration in `tracker_config.h`. The generated
+   `tracker_network.h` tab contains the shared TrackerNet password. Select
+   **ESP32 Dev Module**, then manually upload the
+   left sketch to node 0 and the right sketch to node 1. Existing local config
+   files are preserved when regenerating the folders.
+4. Both boards must run the new **WM2 AIM/FIRE** firmware. The previous WM1
+   tracker and standalone USB/OneNet tests do not provide this workflow.
+5. Open Serial Monitor at **115200 baud** and note each node's IP address.
+
+See the [live tracker setup guide](docs/live-tracker-setup.md) for the detailed
+upload and mounting sequence. PlatformIO remains available as an alternative;
+`pio run` compiles without uploading.
+
+### Connect to TrackerNet
+
+Boot the left ESP32 first: it creates a password-protected **TrackerNet** access
+point at `192.168.4.1`. The right ESP32 joins automatically. On the laptop,
+select **TrackerNet** in Wi-Fi settings and enter the password from the generated
+`tracker_network.h` tab. Stay connected if the laptop reports no internet.
+
+The laptop and right board receive their addresses automatically. The right
+board's address is **not guaranteed to be `192.168.4.2`**; read its Serial Monitor
+if an address is needed. This network can be used at home or school without
+changing either environment's saved credentials.
+
+Start the regular visualizer after joining; both nodes should be discovered:
 
 ```bash
-python -m whack --config config.local.json --nodes 192.168.1.101 192.168.1.102
+python3 -m whack --config config.local.json
 ```
 
-Profiles are saved as `calibration.local.json`; repeat calibration after moving
-sensors or furniture. A changed geometry invalidates the old profile. Recording
-can be enabled with `--record tracking.csv`. For headless room calibration use
-`--headless --calibrate --seconds 120`, with both sensors online and nobody in
-view. A timeout echo is treated as no background return; it does not prove that
-the sensor is healthy. Confirm each sensor against a flat target first.
-
-To centre and bench-test one sensor before calibration, close the visualizer
-and run this from the project root (replace the address with its USB-serial IP):
+If discovery fails, replace `ACTUAL_RIGHT_IP` with the right board's serial IP:
 
 ```bash
-python -m tools.probe_node --ip 192.168.1.101 --node 0 --angle 90 --count 10
+python3 -m whack --config config.local.json --nodes 192.168.4.1 ACTUAL_RIGHT_IP
 ```
 
-This moves the servo to the requested bearing and prints repeated ranges.
-Use small changes around 90 degrees to check direction before testing wider
-travel. Run only one controller/probe at a time.
+### Retained home and school profiles
 
-## How tracking works
+Keep both environments configured in the local firmware settings:
 
-The PC sends one measurement request at a time, with at least 65 ms of quiet time
-before the next request. Each node waits for its servo, pings and returns a
-sequence-tagged range. Two ranges define a forward circle intersection; accepted
-pairs must be no more than 250 ms apart. Large servo moves may require a second
-pair once both sensors are settled. While tracking, bearings snap to measured
-background directions. When tracking is lost, both sensors scan candidate points.
+| `WIFI_PROFILE` | Network |
+| --- | --- |
+| `0` | Home network: `WIFI_SSID` and `WIFI_PASSWORD` |
+| `1` | School local network/hotspot: `SCHOOL_WIFI_SSID` and `SCHOOL_WIFI_PASSWORD` |
+| `2` | Optional Macquarie OneNet PEAP credentials |
+| `3` | TrackerNet: left ESP32 creates Wi-Fi; right ESP32 and laptop join |
 
-The dot disappears on invalid or stale data. A detected position within 0.60 m
-of the screen triggers a warning and a system bell; sensor blind spots can still
-prevent detection. This is a prototype, not a verified collision-warning system.
-Initial acquisition and reacquisition can take a complete sweep and should be
-measured separately from tracking latency.
+`--network tracker` generates a shared random private password and selects
+profile 3 through `tracker_network.h`; it preserves both `tracker_config.h`
+files. Running the generator without `--network` preserves the selection. To
+return to the profile selected in each existing `tracker_config.h`, run:
 
-Two broad ultrasonic beams may hit different body parts or furniture. The
-triangulation model assumes a common reflector, so a build that compiles is not
-proof of accurate body tracking. See [physical acceptance tests](docs/requirements.md)
-and [architecture](docs/architecture.md) before claiming performance.
+```bash
+python3 -m tools.prepare_tracker_firmware --network configured
+```
+
+This removes the generated network override. Manually upload both matching
+sketches after changing network mode. Preparing files does not connect to,
+restart or upload either board.
+
+For development at school, use a reachable 2.4 GHz local network shared by the
+laptop and both ESP32s. Internet access is not required. OneNet troubleshooting
+is deferred; its earlier successful ping does not establish tracker UDP support.
+The optional enterprise profile requires Arduino-ESP32 3.3+ with certificate
+and server-name verification support; the older PlatformIO core cannot use it.
+
+## Start a real tracking session
+
+1. Mount both sensors at the same torso height and depth with horizontal beams.
+   Default acoustic centres are `(0, 0.20)` and `(1.50, 0.20)` metres. The default
+   field runs from `x=0` to `1.50` and `y=0.60` to `2.00`, with the wall at `y=0`.
+2. Copy `config.example.json` to `config.local.json` and enter actual geometry,
+   range corrections and tracking limits.
+3. Join **TrackerNet** on the laptop, or use the selected home/school network
+   that allows communication between clients. The laptop receives on UDP 4210
+   and the boards on UDP 4211.
+4. Start the visualizer:
+
+```bash
+python3 -m whack --config config.local.json
+```
+
+5. Clear the whole field and press **C**. Stay out during the lead-in and dense
+   background sweep. Each calibrated direction is sampled repeatedly; the
+   status reports progress.
+6. Stand briefly at the field centre. The default `center` mode confirms two
+   consistent foreground pairs before showing a tracked position. Press
+   **Space / R** to restart acquisition when needed.
+7. Move slowly first. Watch the spot and use **D** to inspect measurement age,
+   confidence and accepted update rate.
+
+To begin with a search across the field:
+
+```bash
+python3 -m whack --config config.local.json --start-mode search
+```
+
+Full-field acquisition can take longer than tracking an established target. The
+search covers the configured beam model; actual human echoes need physical tests.
+
+If broadcast discovery is unavailable, use the IPs from Serial Monitor:
+
+```bash
+python3 -m whack --config config.local.json --nodes 192.168.1.101 192.168.1.102
+```
+
+Background profiles are stored in `calibration.local.json`. Recalibrate after
+moving either sensor, changing the scene or changing geometry/settings that
+invalidate the profile. Old profiles from the earlier sparse workflow must be
+recreated. A timeout echo means no return, not proof of a healthy sensor; test
+each unit against a flat target before calibration.
+
+Use `--record tracking.csv` to log position, state, prediction flag, fix age,
+confidence and update rate. Only run one controller or hardware probe at a time.
+A node probe moves a real servo; see the setup guide before using it.
+
+## How the workflow works
+
+```text
+Empty-field calibration → Find → Confirm → Track
+                                   ↑        ↓
+                                   └── Local search
+                                            ↓
+                                           Lost → Find
+```
+
+The laptop sends **AIM** to both nodes so their motors can move concurrently.
+Once the servos report **READY**, it authorizes **FIRE** on one sensor at a time,
+with a quiet interval between ultrasound transmissions. A short-lived firing
+permission and sequence checks prevent a delayed/repeated command from becoming
+an extra queued measurement. An unchanged settled bearing has no new movement
+wait. Network loss or uncertain firing completion can lengthen a cycle.
+
+Two corrected ranges define the forward intersection of two circles. Beam,
+background, timing and movement checks reject inconsistent pairs. An alpha-beta
+filter estimates position and velocity; it aligns staggered ranges using the
+motion estimate and predicts the next aiming point. Brief misses trigger a
+bounded nearby search. The spot's extrapolation expires before a prolonged loss
+can leave a stale marker visible; wider acquisition then resumes.
+
+See [the workflow and position equations](docs/player-tracking-workflow.md).
+For a function-by-function explanation, read the [tracker code guide](docs/tracker-code-guide.md).
+Two broad beams can return from different body surfaces or furniture. This is an
+approximate single-player position estimate, not human recognition or a measured
+body centre. Confidence is a software consistency score, not a calibrated
+probability of accuracy.
 
 ## Validation
 
 ```bash
-python -m unittest discover -s tests -v
-cd firmware
-pio run
+python3 -m unittest discover -s tests -v
+python3 -m whack --simulate --headless --seconds 5
 ```
 
-The suite includes a real loopback UDP test; it needs permission to open local
-sockets. A standalone two-node emulator is in `tools/simulate_nodes.py`.
+Firmware compilation and native protocol checks are described in
+[firmware setup](firmware/README.md). The Python suite includes a loopback UDP
+test requiring local socket access. These checks cover software behavior and
+synthetic movement; they do not validate wiring, real servo travel, radio delay,
+ultrasonic crosstalk or reflections from a moving person.
 
-The supplied `example-code/` remains unchanged and licensed by its upstream
-author; see `example-code/UPSTREAM.md`. The tracker implementation is in `whack/`.
+Before reporting live-tracking performance, measure accepted update rate,
+position error, acquisition/recovery times, loss frequency and visible latency
+with both physical units. No measured tracking rate or latency is claimed here.
+
+The supplied `example-code/` retains its upstream license; see
+`example-code/UPSTREAM.md`. Tracker code is in `whack/`.
+
+
+
+mkdir -p results
+python3 -m whack --config config.test-field.json --calibration calibration.test-field.local.json --record results/first-live-test.csv

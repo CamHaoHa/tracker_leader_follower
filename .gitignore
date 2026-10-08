@@ -7,6 +7,11 @@ build/
 dist/
 *.egg-info/
 firmware/include/config.local.h
+firmware/arduino/tracker_left/
+firmware/arduino/tracker_right/
+firmware/arduino/tracker_network.local.json
+firmware/arduino/onenet_test/
+firmware/arduino/onenet_udp_test/
 config.local.json
 calibration.local.json
 *.csv

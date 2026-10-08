@@ -1,0 +1,30 @@
+{
+  "sensor": "A",
+  "true_distance_cm": 50.0,
+  "requested_attempts": 30,
+  "started_at": "2026-09-14T21:58:33.720782+10:00",
+  "port": "/dev/ttyUSB0",
+  "baud": 115200,
+  "capture_timeout_s": 60,
+  "startup_excluded_s": 2,
+  "notes": "",
+  "recorder_sha256": "a97a6e3836788a9964c5fdaa4a6315613b1148c47cfca23bae7fcd65e1e4d26a",
+  "uploaded_firmware": "Not verified over serial; use Arduino sensor_test sketch.",
+  "finished_at": "2026-09-14T21:58:48.747902+10:00",
+  "capture_status": "complete",
+  "summary": {
+    "recorded_attempts": 30,
+    "numerical_returns": 30,
+    "no_echo": 0,
+    "echo_high": 0,
+    "out_of_range": 0,
+    "malformed": 0,
+    "return_rate": 1.0,
+    "mean_cm": 54.626666666666665,
+    "bias_cm": 4.626666666666665,
+    "sample_sd_cm": 7.019722626081919,
+    "min_cm": 48.0,
+    "max_cm": 68.0,
+    "mean_absolute_error_cm": 5.373333333333333
+  }
+}
