@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tracker Algorithm Guide</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+/* Layout: one reading column; each algorithm is a block with "how" then "why we moved here". Tokens shared with README_1.html and the presentation outline. */
+:root {
+  --paper: #f3f5f7; --surface: #ffffff; --ink: #16202a; --muted: #5b6a74; --rule: #d3dbe1;
+  --accent: #0e8a9b; --accent-soft: #dcf0f3; --code-bg: #e9eef2; --code-ink: #1b2a33;
+  --warn: #b3541e; --warn-soft: #f8e7dc; --good: #2d7a3e; --good-soft: #e1f0e4;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1416; --surface: #151c1f; --ink: #d9e1e6; --muted: #93a2ab; --rule: #253036;
+    --accent: #35c6d9; --accent-soft: #10292e; --code-bg: #171f24; --code-ink: #d4dde3;
+    --warn: #e08a52; --warn-soft: #2a1c13; --good: #6cc27d; --good-soft: #132317;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1416; --surface: #151c1f; --ink: #d9e1e6; --muted: #93a2ab; --rule: #253036;
+  --accent: #35c6d9; --accent-soft: #10292e; --code-bg: #171f24; --code-ink: #d4dde3;
+  --warn: #e08a52; --warn-soft: #2a1c13; --good: #6cc27d; --good-soft: #132317;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.6;
+  padding-block: 32px 72px; padding-inline: 16px; }
+main { max-width: 880px; margin: 0 auto; display: grid; gap: 18px; }
+h1, h2, h3 { text-wrap: balance; }
+h1 { font-family: var(--serif); font-weight: 600; font-size: 2.1rem; line-height: 1.15; margin: 0; }
+h2 { font-family: var(--serif); font-weight: 600; font-size: 1.6rem; margin: 44px 0 0; padding-top: 16px; border-top: 1px solid var(--rule); }
+h3 { font-size: 1.12rem; font-weight: 600; margin: 0; }
+p, li { max-width: 70ch; }
+p { margin: 0; }
+ul, ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); color: var(--code-ink); padding: .08em .35em; border-radius: 3px; }
+.eyebrow { font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.lede { color: var(--muted); font-size: 1.05rem; }
+header { display: grid; gap: 10px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 18px; font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+nav.toc { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px 18px; }
+nav.toc ol { columns: 2; column-gap: 28px; display: block; }
+nav.toc li { break-inside: avoid; margin: 2px 0; }
+@media (max-width: 600px) { nav.toc ol { columns: 1; } }
+
+.algo { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px; display: grid; gap: 12px; min-width: 0; }
+.algo .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; }
+.where { font-family: var(--mono); font-size: .75rem; color: var(--muted); }
+.st { font-family: var(--mono); font-size: .7rem; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); white-space: nowrap; }
+.st.active { border-color: var(--good); color: var(--good); }
+.st.v1 { border-color: var(--warn); color: var(--warn); }
+.st.off { border-style: dashed; }
+.why { background: var(--accent-soft); border-radius: 4px; padding: 10px 14px; display: grid; gap: 6px; }
+.why .label { font-family: var(--mono); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.eq { font-family: var(--mono); font-size: .88rem; background: var(--code-bg); color: var(--code-ink); padding: 12px 14px; border-radius: 4px; overflow-x: auto; white-space: pre; line-height: 1.6; }
+.note { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 8px 12px; font-size: .93rem; }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .88rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+td.n { font-family: var(--mono); white-space: nowrap; }
+
+/* pipeline */
+.pipe { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; }
+.pipe .step { flex: 1 1 130px; min-width: 0; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; display: grid; gap: 2px; }
+.pipe .step b { font-size: .92rem; }
+.pipe .step span { font-size: .8rem; color: var(--muted); }
+.pipe .step .k { font-family: var(--mono); font-size: .7rem; color: var(--accent); }
+
+/* timeline */
+.timeline { display: grid; gap: 0; border-left: 2px solid var(--rule); margin-left: 6px; }
+.tl { position: relative; padding: 0 0 18px 20px; display: grid; gap: 4px; }
+.tl::before { content: ""; position: absolute; left: -7px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 2px solid var(--accent); }
+.tl.rej::before { border-color: var(--warn); }
+.tl .date { font-family: var(--mono); font-size: .78rem; color: var(--muted); }
+.tl .ev { font-size: .92rem; }
+.tl .ev strong { color: var(--ink); }
+
+figure { margin: 0; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+.svg-axis { stroke: var(--muted); stroke-width: 1; fill: none; }
+.svg-grid { stroke: var(--rule); stroke-width: 1; fill: none; }
+.svg-raw { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 4; fill: none; }
+.svg-a { stroke: var(--accent); stroke-width: 2.5; fill: none; }
+.svg-a1 { stroke: var(--warn); stroke-width: 2; fill: none; stroke-dasharray: 7 4; }
+.svg-t { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+.svg-tk { font-family: var(--mono); font-size: 11px; fill: var(--ink); }
+.svg-dot { fill: var(--accent); }
+.slots { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 4px 10px; font-family: var(--mono); font-size: .78rem; align-items: center; }
+.lane { position: relative; height: 18px; background: var(--code-bg); border-radius: 3px; }
+.lane i { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
+.lane i.ping { background: var(--accent); }
+.lane i.guard { background: var(--rule); }
+.foot { font-size: .85rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <span class="eyebrow">ENGG3000 · Whack-a-Mole · Tracking subsystem</span>
+  <h1>Tracker Algorithm Guide</h1>
+  <p class="lede">Every algorithm the ultrasonic tracker uses, from the echo timing inside each box to the position on screen. For each one: how it works, the real constants, and why we ended up with it.</p>
+  <div class="meta"><span>Code at main @ 145e02b (5 Oct 2026)</span><span>Default mode: <code>--tracker swarm</code></span><span>Paths relative to the tracker repo</span></div>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#pipeline">The pipeline in one picture</a></li>
+    <li><a href="#story">How we got here</a></li>
+    <li><a href="#foundations">Foundations shared by every version</a></li>
+    <li><a href="#v1">V1: the two-servo tracker</a></li>
+    <li><a href="#swarm">Current: the swarm tracker</a></li>
+    <li><a href="#noise">Noise reduction, layer by layer</a></li>
+    <li><a href="#rejected">Tried and not kept</a></li>
+    <li><a href="#measure">How we measure</a></li>
+  </ol>
+</nav>
+
+<h2 id="pipeline">The pipeline in one picture</h2>
+<p>One loop of the current tracker. Each step is a section below.</p>
+<div class="pipe">
+  <div class="step"><span class="k">1 · aim</span><b>Choose bearing</b><span>sweep, follow, jitter or search</span></div>
+  <div class="step"><span class="k">2 · ping</span><b>One box at a time</b><span>AIM → READY → FIRE → RANGE</span></div>
+  <div class="step"><span class="k">3 · classify</span><b>Is it the player?</b><span>range gates, room map, confirm ping</span></div>
+  <div class="step"><span class="k">4 · fuse</span><b>Combine boxes</b><span>Gauss-Newton on range circles</span></div>
+  <div class="step"><span class="k">5 · filter</span><b>Jump gate + smoothing</b><span>exponential, no prediction</span></div>
+  <div class="step"><span class="k">6 · act</span><b>Steer and warn</b><span>other boxes follow; alerts, buzzer</span></div>
+</div>
+
+<h2 id="story">How we got here</h2>
+<p>Each change was driven by a measurement. Rejected ideas are marked in orange.</p>
+<div class="timeline">
+  <div class="tl"><span class="date">12–15 Sep</span><p class="ev"><strong>Baseline design.</strong> One servo and one HC-SR04 per ESP32, laptop decides everything. Protocol WM2 lets both servos move at once while pings stay one at a time.</p></div>
+  <div class="tl"><span class="date">22 Sep · 2df7385</span><p class="ev"><strong>V1 two-servo tracker works on the bench.</strong> Calibration went from 0 of 3 sweeps finished to 111/111 pairs after READY retries. Body radius 0.18 m fixed a dot 0.2 m too near the wall. Bench, boxes 1.0 m apart: dot 75 %, 4.9 Hz.</p></div>
+  <div class="tl"><span class="date">23 Sep · 1c9836b</span><p class="ev"><strong>V1 fails on the real 1.5 m field, swarm replaces it.</strong> Paired tracker: dot 14 %, 17.6 losses/min, because both sensors must hear the player in the same cycle. First swarm run the same day: dot 92 %.</p></div>
+  <div class="tl"><span class="date">23 Sep · 84fc859</span><p class="ev"><strong>Velocity prediction removed.</strong> With prediction: two-box 39 %, jitter 7.3/5.1 cm. Without: two-box 68 %, jitter 2.1/2.4 cm, 1.3 losses/min. A velocity built from noisy one-box fixes pushed the aims off the player.</p></div>
+  <div class="tl"><span class="date">29 Sep · 835964b</span><p class="ev"><strong>Third box in the middle.</strong> Far corners were 1.86 m from the opposite box, beyond the 1.7 m reliable range. Aims clamped to servo travel (9–15 % of aims were being refused).</p></div>
+  <div class="tl rej"><span class="date">30 Sep · branch only</span><p class="ev"><strong>Lock-scan driven from the laptop: rejected.</strong> 4–5× slower than the same idea running on the box (about 300 ms per ping over Wi-Fi vs 65 ms). Running the sketch on the box was built but never merged: no room map and no shared ping slot.</p></div>
+  <div class="tl"><span class="date">2 Oct · 7d7c9d1</span><p class="ev"><strong>Search after a full loss, plus the game's mole hint.</strong> Column-skipping jumps: 3.4–9.1 s → 1.3–1.5 s in simulation. Field: median reacquire 0.51 → 0.21 s (p = 0.016).</p></div>
+  <div class="tl"><span class="date">5 Oct · aee8ef0</span><p class="ev"><strong>Ghost-echo hold.</strong> A standing player was lost 14 times a minute because of static echoes at 0.62 m and 0.66 m. Simulation: 12.4 → 1.2 losses/min, on the hole 87 → 99 %.</p></div>
+  <div class="tl rej"><span class="date">5 Oct · branch only</span><p class="ev"><strong>Consensus fusion experiment: not merged.</strong> Same results as aee8ef0 (1.1 vs 1.2 losses/min), more code. A 3° aim deadband slowed a column move from 0.62 to 1.15 s and was turned off.</p></div>
+</div>
+
+<h2 id="foundations">Foundations shared by every version</h2>
+
+<article class="algo">
+  <div class="head"><h3>Geometry and bearings</h3><span class="st active">active</span><span class="where">whack/tracking.py:153-186 · swarm.py:530</span></div>
+  <p>Origin on the wall at the left edge of the field. x runs right, y away from the wall, metres. All boxes share one bearing convention in millidegrees: 0° points right, 90° straight out, 180° left.</p>
+  <div class="eq">bearing to a point:   θ = atan2(y − y_s, x − x_s)
+point from a reading:  r = d + R_body          (R_body = 0.18 m, surface → body centre)
+                       P = (x_s + r·cos θ, y_s + r·sin θ)</div>
+  <p>The screen mirrors x, <code>(1 − x/width)·W</code>, because the player faces the screen. Prototype layout: boxes at x = 0, 0.75, 1.50 m on the line y = 0.5 m; field 1.5 m wide, 0.6–2.0 m deep.</p>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Wire protocol: AIM, READY, FIRE, RANGE</h3><span class="st active">active</span><span class="where">whack/protocol.py · firmware/include/wm_protocol.h · main.cpp:345-460</span></div>
+  <ol>
+    <li><strong>AIM seq bearing.</strong> The box moves the servo and starts a settle timer. A bearing outside servo travel is refused at once.</li>
+    <li><strong>READY.</strong> After settling, the box grants a one-use firing lease of 1000 ms and says so.</li>
+    <li><strong>FIRE seq.</strong> Allowed only inside the lease and at least 65 ms after this box's last ping. A late FIRE is answered INVALID, never queued.</li>
+    <li><strong>RANGE.</strong> Distance in mm with OK, TIMEOUT or INVALID, plus how long ago the ping was taken.</li>
+  </ol>
+  <p>Sequence numbers are 32-bit and only newer ones are accepted (wrap-safe: <code>0 &lt; cand − prev &lt; 2³¹</code>). A duplicate FIRE replays the cached answer instead of pinging again. The laptop resends AIM every 0.3 s until READY arrives.</p>
+  <div class="why"><span class="label">Why</span><p>UDP over Wi-Fi loses packets. Leases and cached replies make every retry safe: a lost packet can never cause a second ping in the air or a servo moving mid-ping. Before the retries, calibration aborted 3 times in 20 steps.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Ping scheduling: one acoustic slot</h3><span class="st active">active</span><span class="where">swarm.py:764-838</span></div>
+  <p>All servos move at the same time, but only one box may have a ping in the air. The box whose READY came first fires first. After its RANGE arrives, the next FIRE waits a 65 ms acoustic guard so late echoes die out. If a reply is lost, the guard assumes the worst case: lease + 25 ms echo timeout + 65 ms.</p>
+  <div class="slots" aria-label="Ping slots for three boxes">
+    <span>box 0</span><div class="lane"><i class="ping" style="left:0%;width:8%"></i><i class="guard" style="left:8%;width:22%"></i><i class="ping" style="left:100%;width:0"></i></div>
+    <span>box 1</span><div class="lane"><i class="ping" style="left:33%;width:8%"></i><i class="guard" style="left:41%;width:22%"></i></div>
+    <span>box 2</span><div class="lane"><i class="ping" style="left:66%;width:8%"></i><i class="guard" style="left:74%;width:22%"></i></div>
+    <span></span><span class="where">0 ← one step per box = 3 × 0.10 s = 0.30 s →</span>
+  </div>
+  <div class="eq">T_slot = 25 ms echo timeout + 65 ms guard + 10 ms poll ≈ 0.10 s
+T_step = N_boxes × T_slot = 3 × 0.10 = 0.30 s per bearing, per box</div>
+  <div class="why"><span class="label">Why</span><p>Two HC-SR04s pinging together hear each other's echoes and report a false range. The cost is that the step rate is set by the schedule, not the servo. That is why faster recovery had to come from bigger search steps, not faster servos.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Echo measurement in the firmware</h3><span class="st active">active</span><span class="where">firmware/src/main.cpp:278-318</span></div>
+  <ol>
+    <li>If ECHO is already high, report INVALID and do not trigger ("sensor busy").</li>
+    <li>TRIG low 2 µs, high 10 µs.</li>
+    <li><code>pulseIn(ECHO, HIGH, 25000)</code>; 0 means TIMEOUT (25 ms ≈ 4.3 m).</li>
+    <li>Convert with 343 m/s and halve the round trip; outside 20–4000 mm is INVALID.</li>
+  </ol>
+  <div class="eq">distance_mm = (duration_µs × 343 + 1000) / 2000</div>
+  <p>One ping per FIRE, no averaging on the box. Speed of sound fixed for about 20 °C.</p>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Servo ramp and settle</h3><span class="st active">active</span><span class="where">main.cpp:210-240, 329-343</span></div>
+  <div class="eq">pulse_µs  = 500 + bearing × 2000 / 180°       (50 Hz PWM)
+ramp rate = max(150 °/s, move / 640 ms)
+settle    = 60 ms + max(ramp time, 3 ms × move°),  at most 700 ms</div>
+  <p>READY is sent only after the settle time. On the laptop, every aim is clamped to the servo travel before it is sent.</p>
+  <div class="why"><span class="label">Why</span><p>A 73° jump at full speed rocked the box and the sensor pinged while still swinging. The ramp keeps the box still; the clamp stopped the box refusing 9–15 % of aims.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Finding the boxes on the network</h3><span class="st active">active</span><span class="where">whack/transport.py:37-93</span></div>
+  <p>Each box broadcasts <code>WM2 HELLO &lt;id&gt;</code> every 2 s. A box silent for 6 s is offline. If two addresses claim the same ID within 6 s, that ID is disabled until the conflict clears. Everything runs on one phone hotspot because university Wi-Fi blocked box-to-laptop UDP.</p>
+</article>
+
+<h2 id="v1">V1: the two-servo tracker</h2>
+<p class="lede">Still in the code as <code>--tracker pairs</code> (two-box layouts only). Both servos aim at one shared point; a position needs both echoes from the same cycle.</p>
+
+<article class="algo">
+  <div class="head"><h3>Search path</h3><span class="st v1">V1</span><span class="where">tracking.py:188-278</span></div>
+  <p>Split the field into cells until every cell sits inside both beams from one pair of bearings. Then order those aim points by greedy nearest neighbour in bearing space, using the larger of the two servo swings as distance. After a loss, restart at the aim point nearest the last fix.</p>
+  <div class="why"><span class="label">Why</span><p>The first search order jumped across the field and the servo "ran like crazy". Nearest-neighbour order cut the mean swing per step to 12–14°.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Two-range circle intersection</h3><span class="st v1">V1</span><span class="where">tracking.py:317-349</span></div>
+  <div class="eq">r₀ = d₀ + R_body,  r₁ = d₁ + R_body,  b = x₁ − x₀
+reject if r₀ + r₁ ≤ b  or  |r₀ − r₁| ≥ b        (circles do not cross)
+u = (r₀² − r₁² + b²) / 2b
+h = √(r₀² − u²)
+P = (x₀ + u,  y_s + h)                        (front root: player is in front)</div>
+  <p>Then four gates: both readings within 0.15 s of each other and fresh; the point inside both beams (20° plus the body's angular size); no jump faster than 3 m/s + 0.15 m. Two accepted pairs within 0.3 m confirm a lock.</p>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Alpha-beta filter with prediction</h3><span class="st v1">V1</span><span class="st off">removed from swarm 23 Sep</span><span class="where">tracking.py:486-531</span></div>
+  <div class="eq">α = clamp(1 − e^(−dt/τ), 0.35, 0.9),   β = 0.5 α²
+p = p_pred + α·e,     v = v + β·e/dt   (|v| ≤ 3 m/s)
+shown = p + v·min(age, 0.20 s)</div>
+  <div class="why"><span class="label">Why it went</span><p>Prediction makes sense when every fix is precise. In the swarm, many fixes come from one box and are noisy, so the velocity was mostly noise. It aimed the boxes ahead of where the player was. Removing it raised two-box fixes from 39 % to 68 %.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Why V1 failed on the full field</h3><span class="st v1">V1</span></div>
+  <ul>
+    <li>Fix probability per cycle is p₀·p₁. With echo rates of 0.75 and 0.74 that is 56 %, against 94 % when any one box is enough.</li>
+    <li>At 1.5 m spacing, a player near one box is beyond the other box's 1.7 m reliable range, so there is no fix at all.</li>
+    <li>Measured: dot 14 %, 17.6 losses/min, 2.6 Hz, reacquire 4.4 s median.</li>
+  </ul>
+</article>
+
+<h2 id="swarm">Current: the swarm tracker</h2>
+<p class="lede">Every box sweeps on its own. The first reliable hit becomes the leader and pulls the others to that point. Code: <code>whack/swarm.py</code>.</p>
+
+<article class="algo">
+  <div class="head"><h3>Choosing each box's next bearing</h3><span class="st active">active</span><span class="where">swarm.py:435-485</span></div>
+  <p>Per box, in priority order:</p>
+  <ol>
+    <li><strong>Hold</strong> the same bearing for a confirm ping, a busy-sensor retry, or the game's hint.</li>
+    <li><strong>Aimed</strong> at the current estimate while it is fresh (≤ 0.5 s old).</li>
+    <li><strong>Jitter</strong> +8°, −8°, 0° around the last spot for 1.0 s after an aimed miss.</li>
+    <li><strong>Sweep</strong> its own arc in 5° steps, reversing at the ends.</li>
+    <li><strong>Search</strong> in 15° steps toward the field centre after a full loss.</li>
+  </ol>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Leader-follower aiming</h3><span class="st active">active</span><span class="where">swarm.py:624-646</span></div>
+  <p>After each accepted fix, the box that made it and any box already aimed stay aimed at the new point. Every other box is switched to aim there too. A box that is jittering or cooling down after a sweep (2.0 s) only re-aims if the spot moved at least 0.3 m.</p>
+  <div class="why"><span class="label">Why</span><p>This is the core change from V1. A box no longer needs a partner hit in the same cycle; one hit is enough to show a spot and to bring the others in for a two-box fix.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Classifying a reading</h3><span class="st active">active</span><span class="where">swarm.py:504-528</span></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Check, in order</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>Status not OK (timeout, invalid)</td><td>miss; last echo kept</td></tr>
+      <tr><td>d &lt; 0.10 m</td><td>"too close" alert input</td></tr>
+      <tr><td>Matches the empty-room map</td><td>miss; it is the room</td></tr>
+      <tr><td>d &gt; 1.7 m</td><td>hint only, treated as a miss</td></tr>
+      <tr><td>Repeats the last reading: within 16°, 0.10 m, 1.5 s</td><td><strong>reliable</strong>, used for a fix</td></tr>
+      <tr><td>Anything else</td><td>candidate: ping the same bearing once more</td></tr>
+    </tbody>
+  </table></div>
+  <div class="why"><span class="label">Why the confirm ping</span><p>A single echo can be a reflection or noise. Asking for the same range twice costs one ping (0.30 s) and removes most one-off ghosts. Widening the match from 5° to 16° (aee8ef0) stopped jitter steps from breaking the confirmation.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Empty-room map and the static-echo band</h3><span class="st active">active</span><span class="where">swarm.py:293-308, 488-502</span></div>
+  <p>Calibration: each box sweeps its arc with the field empty, 3 pings per 5° bearing, and stores the median if at least 2 are valid. During play, a reading is the room if any mapped bearing within ±10° has an echo within ±0.15 m of it.</p>
+  <div class="eq">background  ⇔  ∃ b' with |b' − b| ≤ 10° and |d − map(b')| ≤ 0.15 m</div>
+  <div class="why"><span class="label">Why a band</span><p>The old rule threw away anything at or beyond the mapped echo minus 0.15 m, on the nearest bearing only. That hid a player standing behind a table edge, and missed static echoes on neighbouring bearings. On 5 Oct, static echoes at 0.62 m and 0.66 m made the cursor jump up to 1.2 m. The band rejects only echoes that match the room, and checks ±10° because the beam is about ±20° wide.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Fusion: Gauss-Newton on range circles</h3><span class="st active">active</span><span class="where">swarm.py:153-185</span></div>
+  <p>Find the point whose distance to each box best matches that box's range. Start from the mean of each box's polar point, then iterate.</p>
+  <div class="eq">minimise  Σᵢ ( |P − Sᵢ| − rᵢ )²
+
+residual  eᵢ = |P − Sᵢ| − rᵢ
+Jacobian  Jᵢ = (P − Sᵢ) / |P − Sᵢ|            (unit vector box → point)
+step      (JᵀJ) Δ = Jᵀe   → solve 2×2 by Cramer's rule,  P ← P − Δ
+stop      |Δx| + |Δy| &lt; 0.1 mm,  or 6 iterations</div>
+  <p><strong>Worked example.</strong> Boxes at (0, 0.5), (0.75, 0.5), (1.5, 0.5). True player (0.50, 1.30). Readings with noise +2, −1, +3 cm: d = 0.783, 0.648, 1.131 m at bearings 60°, 105°, 140°.</p>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Step</th><th>x (m)</th><th>y (m)</th><th>Residuals (m)</th><th>|Δx|+|Δy|</th></tr></thead>
+    <tbody>
+      <tr><td>start (mean of polar points)</td><td class="n">0.5045</td><td class="n">1.3256</td><td class="n">—</td><td class="n">—</td></tr>
+      <tr><td>iteration 1</td><td class="n">0.4935</td><td class="n">1.3121</td><td class="n">+0.004, +0.033, −0.017</td><td class="n">0.0244</td></tr>
+      <tr><td>iteration 2</td><td class="n">0.4939</td><td class="n">1.3120</td><td class="n">−0.013, +0.024, −0.017</td><td class="n">0.0004</td></tr>
+      <tr><td>iteration 3</td><td class="n">0.4939</td><td class="n">1.3120</td><td class="n">−0.013, +0.023, −0.018</td><td class="n">0.00001 → stop</td></tr>
+    </tbody>
+  </table></div>
+  <p>Final error 1.4 cm from the truth with 1–3 cm range noise; worst residual 0.023 m, well inside the 0.30 m agreement limit. With only one box there is nothing to solve: the fix is the polar point along the bearing.</p>
+  <div class="why"><span class="label">Why not the closed form</span><p>V1's formula only works for exactly two circles. Least squares takes any number of boxes, uses every range, and reports a residual we can use as an agreement test. It converges in 2–3 steps because the starting point is already close.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Agreement and outvoting</h3><span class="st active">active</span><span class="where">swarm.py:570-622</span></div>
+  <p>Use each box's latest reliable reading from the last 0.6 s. The fix is accepted when the worst residual is ≤ 0.30 m <em>and</em> the fused point lies inside every contributing beam (20° + 10° slack). If not:</p>
+  <ol>
+    <li>Keep the newest reading with the largest group of other readings that agree with it.</li>
+    <li>If nobody agrees with the newest reading but two other boxes still holding the player agree with each other, the newest reading is outvoted and counts as a miss.</li>
+    <li>If readings 0.6 m or more apart keep disagreeing for 1 s, raise "two players".</li>
+  </ol>
+  <div class="why"><span class="label">Why</span><p>Two ranges can meet at a point neither beam is facing: a ghost. The beam check removes it. Outvoting stops one box with a wall echo from dragging a well-held spot away.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Jump gate and exponential smoothing</h3><span class="st active">active</span><span class="where">swarm.py:118-150 (Estimate)</span></div>
+  <div class="eq">reject  if |P_new − P_old| &gt; 3 m/s · dt + 0.30 m        "Position jumped"
+α = clamp(1 − e^(−dt/τ), 0.35, 0.90),   τ = 0.12 s
+α ← α / 2  for a one-box fix
+P ← P_old + α (P_new − P_old)</div>
+  <figure>
+    <svg id="alpha-chart" viewBox="0 0 560 250" role="img" aria-label="Smoothing weight alpha against time between fixes, with clamping at 0.35 and 0.9 and the halved one-box curve."></svg>
+    <figcaption>Weight given to a new fix against the time since the last one (τ = 0.12 s). Dotted: the unclamped curve. Solid: two or more boxes. Dashed: one box.</figcaption>
+  </figure>
+  <p>Example: fixes 0.15 s apart give α = 0.71, so the spot moves 71 % of the way to the new fix; a one-box fix moves it 36 %.</p>
+  <div class="why"><span class="label">Why this filter</span><p>The weight depends on dt, so the spot behaves the same whether fixes arrive at 3 Hz or 7 Hz. The lower clamp keeps the spot moving when fixes come quickly; the upper clamp keeps some smoothing after a long gap. One-box fixes are noisier, so they get half the weight. There is no velocity term, for the reason in V1 above.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Search after a full loss, and the mole hint</h3><span class="st active">active</span><span class="where">swarm.py:338-348, 397-433, 799-803</span></div>
+  <p>If no fix arrives for 0.5 s, the player is lost. Every box switches to search: 15° steps, starting in the direction of the field centre. After it has reached both ends of its arc it falls back to the 5° sweep. If the game has called <code>expect(point)</code> with the next mole, each box first looks at that point.</p>
+  <div class="eq">T_found ≈ T_start + n · T_step + T_confirm
+
+Before (jitter 1 s, then 5° sweep):  1.30 + 6 × 0.30 + 0.30 = 3.40 s   (simulator 3.64 s)
+After  (search, 15° steps):          0.50 + 2 × 0.30 + 0.30 = 1.40 s   (simulator 1.44 s)</div>
+  <div class="why"><span class="label">Why</span><p>Before this, a jump that skipped a column always lost the player for 3.3–9.3 s. Boxes jittered round an empty spot for a second, then crept 5° at a time, sometimes away from the player. Since the step period is fixed by the ping schedule, the only levers were starting sooner, taking bigger steps, and starting in the right direction.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Alerts and the buzzer</h3><span class="st active">active</span><span class="where">swarm.py:844-926</span></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Alert</th><th>Condition</th><th>Must last</th></tr></thead>
+    <tbody>
+      <tr><td>Too close</td><td>a reading under 0.10 m</td><td class="n">0.3 s</td></tr>
+      <tr><td>Two players</td><td>2+ disagreements 0.6 m apart in 3 s</td><td class="n">1.0 s</td></tr>
+      <tr><td>Dead zone / outside</td><td>two-box fix: y &lt; 0.6 m or 0.10 m outside the field; one-box fix: 0.05 m deeper and 0.40 m outside</td><td class="n">0.5 s</td></tr>
+    </tbody>
+  </table></div>
+  <p>Every alert then stays up for at least 2 s. During a too-close or dead-zone alert, the buzzer box gets <code>BUZZ 400</code> every 0.2 s and silences itself if the laptop goes quiet.</p>
+  <div class="why"><span class="label">Why the stricter one-box rule</span><p>The first swarm run raised 65 false "outside the field" pauses, all from one-box fixes near the edges. With the wider margin and the 2 s latch, the second run had none.</p></div>
+</article>
+
+<h2 id="noise">Noise reduction, layer by layer</h2>
+<p>Each layer removes a different kind of error. Nothing averages pings on the box; the cleaning happens on the laptop where all boxes can be compared.</p>
+<div class="tablewrap"><table>
+  <thead><tr><th>Layer</th><th>Technique</th><th>Removes</th><th>Constant</th></tr></thead>
+  <tbody>
+    <tr><td>Firmware</td><td>No trigger while ECHO is still high</td><td>overlapping pings</td><td class="n">—</td></tr>
+    <tr><td>Firmware</td><td>Echo timeout and valid range</td><td>no-echo and impossible values</td><td class="n">25 ms; 20–4000 mm</td></tr>
+    <tr><td>Firmware</td><td>One-use lease, 65 ms between pings</td><td>stale or doubled pings</td><td class="n">1000 ms; 65 ms</td></tr>
+    <tr><td>Firmware</td><td>Servo ramp and settle before READY</td><td>pinging while the sensor swings</td><td class="n">150 °/s; ≤ 700 ms</td></tr>
+    <tr><td>Schedule</td><td>One ping in the air + acoustic guard</td><td>cross-talk between boxes</td><td class="n">65 ms</td></tr>
+    <tr><td>Timing</td><td>Reject a reading whose timing window is too wide</td><td>delayed packets</td><td class="n">−3 ms … 0.12 s</td></tr>
+    <tr><td>Calibration</td><td>Empty-room map, median of 3 pings</td><td>walls, tables, floor</td><td class="n">3 pings, ≥ 2 valid</td></tr>
+    <tr><td>Classify</td><td>Static-echo band</td><td>echoes from the room</td><td class="n">±0.15 m, ±10°</td></tr>
+    <tr><td>Classify</td><td>Range gates</td><td>too near / unreliable far echoes</td><td class="n">0.10 m; 1.7 m</td></tr>
+    <tr><td>Classify</td><td>Body radius</td><td>surface vs centre bias</td><td class="n">0.18 m</td></tr>
+    <tr><td>Classify</td><td>Confirm ping</td><td>one-off reflections</td><td class="n">0.10 m, 16°, 1.5 s</td></tr>
+    <tr><td>Fusion</td><td>Residual gate + beam check</td><td>ghost intersections</td><td class="n">0.30 m; 20° + 10°</td></tr>
+    <tr><td>Fusion</td><td>Largest agreeing group, outvote</td><td>one box with a bad echo</td><td class="n">2 holding boxes</td></tr>
+    <tr><td>Fusion</td><td>Fresh readings only</td><td>stale positions</td><td class="n">0.6 s</td></tr>
+    <tr><td>Filter</td><td>Jump gate</td><td>physically impossible moves</td><td class="n">3 m/s · dt + 0.3 m</td></tr>
+    <tr><td>Filter</td><td>Exponential smoothing, half weight for one box</td><td>range jitter</td><td class="n">τ = 0.12 s</td></tr>
+    <tr><td>Alerts</td><td>Debounce times and 2 s latch</td><td>flickering warnings</td><td class="n">0.3 / 0.5 / 1.0 / 2.0 s</td></tr>
+  </tbody>
+</table></div>
+
+<h2 id="rejected">Tried and not kept</h2>
+
+<article class="algo">
+  <div class="head"><h3>Lock-scan from the laptop</h3><span class="st off">branch only</span><span class="where">branch tracking-algorithm-new-experience · whack/lockscan.py</span></div>
+  <p>Each box searches in 3° steps; the first echo under 1.7 m locks it. Then it scans ±15° around the lock, moving the lock to the mean bearing of the hits and blending range 0.7 old + 0.3 new. Four empty passes unlock it.</p>
+  <div class="why"><span class="label">Why not</span><p>Each step needs two Wi-Fi round trips and a shared ping slot, so a pass took 3–4 s instead of 0.7 s on the box: about one update per second with three boxes. Too slow to follow a player.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Sketch running on the box</h3><span class="st off">branch only</span><span class="where">firmware/src/lockscan_main.cpp · whack/sketch.py</span></div>
+  <p>The same lock-scan, run in the firmware at its own pace; the laptop only listens and fuses the locks. Simulated 5.4 updates per second.</p>
+  <div class="why"><span class="label">Why not</span><p>No empty-room map, so a wall within 1 m locks a box. Boxes ping at the same time and can hear each other. Built but not run on hardware, and not merged.</p></div>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Consensus fusion and aim deadband</h3><span class="st off">branch only</span><span class="where">branch experiment-tracker-reliability</span></div>
+  <p>A different way to pick the agreeing readings, a beam-wide static-echo test, and a 3° deadband that holds the servo still for small changes.</p>
+  <div class="why"><span class="label">Why not</span><p>In simulation it matched the merged fix (1.1 vs 1.2 losses/min, same walking error) for more code. The deadband slowed a column move from 0.62 s to 1.15 s.</p></div>
+</article>
+
+<h2 id="measure">How we measure</h2>
+
+<article class="algo">
+  <div class="head"><h3>Simulator</h3><span class="where">whack/transport.py:125-310 · tools/jump_bench.py · tools/stand_bench.py</span></div>
+  <p>Runs the real tracker code against simulated boxes on a simulated clock, so results repeat exactly. Beam: a ±20° cone. Player: a disc of radius 0.18 m. Firmware rules (lease, 65 ms gap, cache) are enforced. The stand bench adds the static echoes seen on 5 Oct and misses 15 % of pings at the player.</p>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Session metrics</h3><span class="where">tools/session_metrics.py</span></div>
+  <ul>
+    <li><strong>Dot %</strong>: share of active rows with a position.</li>
+    <li><strong>Jitter</strong>: median over 2 s windows of the standard deviation of x and y.</li>
+    <li><strong>Losses per minute</strong>: track → not-track transitions, for runs over 30 s.</li>
+    <li><strong>Reacquire</strong>: loss to next track, median and 90th percentile.</li>
+  </ul>
+</article>
+
+<article class="algo">
+  <div class="head"><h3>Permutation test</h3><span class="where">results/report/reacquire_report.py</span></div>
+  <p>Pool the V1 and V2 reacquire times, shuffle 20 000 times, split into groups of the original sizes, and count how often the difference is at least as large as observed. One-sided, seed 1.</p>
+  <div class="eq">median reacquire  V1 0.51 s,  V2 0.21 s   → p = 0.016
+mean reacquire    V1 0.79 s,  V2 0.47 s   → p = 0.032</div>
+  <div class="why"><span class="label">Why this test</span><p>Loss times are skewed with a long tail, so a t-test's normal assumption does not hold. A permutation test makes no assumption about the distribution.</p></div>
+</article>
+
+<p class="note">Results from 2 Oct onward are simulator results, except the 3 Oct field comparison of reacquire times. The ghost-echo fix has not yet been measured on the boxes.</p>
+<p class="foot">Sources: tracker code at 145e02b, docs/CHANGELOG.md, docs/mvp1-bench-log-2026-09-22.md, docs/mvp1-bench-log-2026-09-23.md, docs/jump-bench-2026-10-02.md, docs/stand-bench-2026-10-05.md, results/report/reacquire_table.md.</p>
+
+</main>
+<script>
+(function () {
+  var svg = document.getElementById("alpha-chart");
+  if (!svg) return;
+  var NS = "http://www.w3.org/2000/svg", L = 50, R = 540, T = 15, B = 215, tau = 0.12, tmax = 0.5;
+  function X(t) { return L + (t / tmax) * (R - L); }
+  function Y(a) { return B - a * (B - T); }
+  function el(name, attrs, text) {
+    var e = document.createElementNS(NS, name);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    svg.appendChild(e); return e;
+  }
+  [0, 0.25, 0.5, 0.75, 1].forEach(function (a) {
+    el("line", { x1: L, x2: R, y1: Y(a), y2: Y(a), "class": "svg-grid" });
+    el("text", { x: L - 8, y: Y(a) + 4, "text-anchor": "end", "class": "svg-t" }, a.toFixed(2));
+  });
+  [0, 0.1, 0.2, 0.3, 0.4, 0.5].forEach(function (t) {
+    el("text", { x: X(t), y: B + 18, "text-anchor": "middle", "class": "svg-t" }, t.toFixed(1));
+  });
+  el("text", { x: (L + R) / 2, y: B + 33, "text-anchor": "middle", "class": "svg-t" }, "time since last fix, dt (s)");
+  el("line", { x1: L, x2: R, y1: B, y2: B, "class": "svg-axis" });
+  el("line", { x1: L, x2: L, y1: T, y2: B, "class": "svg-axis" });
+  function path(f) {
+    var d = "";
+    for (var i = 0; i <= 200; i++) { var t = tmax * i / 200; d += (i ? "L" : "M") + X(t).toFixed(1) + " " + Y(f(t)).toFixed(1); }
+    return d;
+  }
+  function raw(t) { return 1 - Math.exp(-t / tau); }
+  function a2(t) { return Math.min(0.9, Math.max(0.35, raw(t))); }
+  el("path", { d: path(raw), "class": "svg-raw" });
+  el("path", { d: path(a2), "class": "svg-a" });
+  el("path", { d: path(function (t) { return a2(t) / 2; }), "class": "svg-a1" });
+  el("circle", { cx: X(0.15), cy: Y(a2(0.15)), r: 4, "class": "svg-dot" });
+  el("text", { x: X(0.15) + 8, y: Y(a2(0.15)) + 14, "class": "svg-tk" }, "0.15 s → 0.71");
+  el("text", { x: X(0.42), y: Y(0.9) - 6, "class": "svg-tk" }, "2+ boxes");
+  el("text", { x: X(0.42), y: Y(0.45) - 6, "class": "svg-tk" }, "1 box");
+})();
+</script>
+</body>
+</html>

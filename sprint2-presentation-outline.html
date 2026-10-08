@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sprint 2 Tracker Presentation</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
+<style>
+/* Layout: one reading column of slide cards, numbered because the talk is a sequence; worked maths set as lab-notebook blocks. Tokens match README_1.html. */
+:root {
+  --paper: #f3f5f7; --surface: #ffffff; --ink: #16202a; --muted: #5b6a74; --rule: #d3dbe1;
+  --accent: #0e8a9b; --accent-soft: #dcf0f3; --code-bg: #e9eef2; --code-ink: #1b2a33;
+  --warn: #b3541e; --warn-soft: #f8e7dc; --good: #2d7a3e;
+  --v1: #b3541e; --v2: #0e8a9b;
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1416; --surface: #151c1f; --ink: #d9e1e6; --muted: #93a2ab; --rule: #253036;
+    --accent: #35c6d9; --accent-soft: #10292e; --code-bg: #171f24; --code-ink: #d4dde3;
+    --warn: #e08a52; --warn-soft: #2a1c13; --good: #6cc27d;
+    --v1: #e08a52; --v2: #35c6d9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1416; --surface: #151c1f; --ink: #d9e1e6; --muted: #93a2ab; --rule: #253036;
+  --accent: #35c6d9; --accent-soft: #10292e; --code-bg: #171f24; --code-ink: #d4dde3;
+  --warn: #e08a52; --warn-soft: #2a1c13; --good: #6cc27d;
+  --v1: #e08a52; --v2: #35c6d9;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55;
+  padding-block: 32px 72px; padding-inline: 16px; }
+main { max-width: 860px; margin: 0 auto; display: grid; gap: 20px; }
+h1, h2, h3 { text-wrap: balance; }
+h1 { font-family: var(--serif); font-weight: 600; font-size: 2.1rem; line-height: 1.15; margin: 0; }
+h2 { font-family: var(--serif); font-weight: 600; font-size: 1.6rem; margin: 40px 0 0; }
+h3 { font-size: 1.1rem; font-weight: 600; margin: 0; }
+p, li { max-width: 68ch; }
+p { margin: 0; }
+ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code { font-family: var(--mono); font-size: .86em; background: var(--code-bg); color: var(--code-ink); padding: .08em .35em; border-radius: 3px; }
+.eyebrow { font-family: var(--mono); font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+.lede { color: var(--muted); font-size: 1.05rem; }
+header { display: grid; gap: 10px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+
+/* stage strip */
+.stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.stage { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 14px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+.stage .tag { font-family: var(--mono); font-size: .75rem; letter-spacing: .06em; text-transform: uppercase; }
+.stage.v1 .tag { color: var(--v1); } .stage.v2 .tag, .stage.mvp .tag { color: var(--v2); }
+.stage p { font-size: .92rem; color: var(--muted); }
+@media (max-width: 640px) { .stages { grid-template-columns: 1fr; } }
+
+/* slides */
+.slide { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; display: grid; grid-template-columns: 56px minmax(0, 1fr); }
+.slide .num { font-family: var(--mono); font-size: 1.1rem; color: var(--accent); padding: 16px 0 0 16px; }
+.slide .body { padding: 16px 18px 18px 0; display: grid; gap: 10px; min-width: 0; }
+.slide .msg { font-family: var(--serif); font-size: 1.05rem; font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-family: var(--mono); font-size: .72rem; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--rule); color: var(--muted); }
+.chip.sec { border-color: var(--accent); color: var(--accent); }
+.label { font-family: var(--mono); font-size: .72rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.notes { border-left: 3px solid var(--rule); padding: 4px 0 4px 12px; font-size: .92rem; color: var(--muted); }
+.flag { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 8px 12px; font-size: .92rem; }
+@media (max-width: 520px) { .slide { grid-template-columns: 1fr; } .slide .num { padding: 14px 16px 0; } .slide .body { padding: 6px 16px 16px; } }
+
+/* tables */
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: .9rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+td.n { text-align: right; font-family: var(--mono); white-space: nowrap; }
+td.v1 { color: var(--v1); } td.v2 { color: var(--v2); }
+td.gap { color: var(--muted); font-style: italic; }
+
+/* worked maths */
+.calc { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 18px; display: grid; gap: 12px; }
+.calc h3 { font-family: var(--serif); font-size: 1.2rem; }
+.eq { font-family: var(--mono); font-size: .9rem; background: var(--code-bg); color: var(--code-ink); padding: 12px 14px; border-radius: 4px; overflow-x: auto; white-space: pre; line-height: 1.6; }
+.result { font-family: var(--mono); font-size: .9rem; border-left: 3px solid var(--good); padding: 4px 12px; }
+.result.bad { border-left-color: var(--warn); }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 300px); gap: 18px; align-items: start; }
+@media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+figure { margin: 0; }
+figure svg { display: block; width: 100%; height: auto; max-width: 300px; }
+figcaption { font-size: .82rem; color: var(--muted); margin-top: 6px; }
+.svg-field { fill: var(--accent-soft); stroke: var(--rule); }
+.svg-wall { stroke: var(--ink); stroke-width: 3; }
+.svg-c0 { fill: none; stroke: var(--v2); stroke-width: 1.5; }
+.svg-c1 { fill: none; stroke: var(--v1); stroke-width: 1.5; }
+.svg-reach { fill: none; stroke: var(--v1); stroke-width: 1.2; stroke-dasharray: 5 4; }
+.svg-box { fill: var(--ink); }
+.svg-player { fill: var(--ink); }
+.svg-edge { fill: var(--surface); stroke: var(--warn); stroke-width: 2; }
+.svg-t { font-family: var(--mono); font-size: 11px; fill: var(--muted); }
+.svg-tk { font-family: var(--mono); font-size: 11px; fill: var(--ink); }
+.foot { font-size: .85rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+</head>
+<body>
+<main>
+
+<header>
+  <span class="eyebrow">ENGG3000 · Whack-a-Mole · Tracking subsystem</span>
+  <h1>Sprint 2 Tracker Presentation</h1>
+  <p class="lede">Slide-by-slide outline for the current MVP, built on the V1 two-servo tracker as the baseline. Every figure comes from the bench logs and results committed in this repository; the source sits under each slide.</p>
+  <div class="meta"><span>Prepared 6 Oct 2026</span><span>Branch main @ 145e02b</span><span>13 slides + backup</span></div>
+</header>
+
+<section class="stages" aria-label="Versions compared">
+  <div class="stage v1">
+    <span class="tag">V1 · baseline · 22 Sep</span>
+    <h3>Two-servo tracker</h3>
+    <p>Two boxes aim at one shared point. A fix needs both echoes in the same cycle; position from the intersection of two range circles. <code>0ea3afa</code>, explained in <code>README_1.html</code>.</p>
+  </div>
+  <div class="stage v2">
+    <span class="tag">V2 · 23 Sep</span>
+    <h3>Swarm leader-follower</h3>
+    <p>Each box sweeps on its own; any reliable hit pulls the others to that point. Least-squares fusion, one-box fallback, no velocity prediction. <code>84fc859</code>.</p>
+  </div>
+  <div class="stage mvp">
+    <span class="tag">Current MVP · 5 Oct</span>
+    <h3>Three-box swarm, ruggedized</h3>
+    <p>Third box in the middle, search after a full loss, mole hint from the game, hold through a static echo. <code>145e02b</code>.</p>
+  </div>
+</section>
+
+<h2>Slides</h2>
+
+<article class="slide">
+  <div class="num">01</div>
+  <div class="body">
+    <h3>Title</h3>
+    <p class="msg">Ultrasonic player tracking: from a two-servo tracker to a three-box swarm.</p>
+    <ul>
+      <li>Team name, your name and role on the tracking subsystem, sprint, date.</li>
+      <li>One photo of the three boxes on the sensor line in front of the field.</li>
+    </ul>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">02</div>
+  <div class="body">
+    <h3>Objective parameters</h3>
+    <p class="msg">What the subsystem must do, taken from the ES3 brief v2.1 (pp. 4–6) and set in Sprint 1.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>ID</th><th>Requirement</th><th>Metric we report</th></tr></thead>
+      <tbody>
+        <tr><td>R1</td><td>Track a person with ultrasound only, show a dot</td><td>Dot on screen, % of active time</td></tr>
+        <tr><td>R2</td><td>Field 1.5 m × 1.4 m, starting 0.6 m from the wall</td><td>Coverage at edges, losses per minute</td></tr>
+        <tr><td>R4</td><td>Detect the 0.6 m dead zone, report loss separately</td><td>False dead-zone alerts</td></tr>
+        <tr><td>R5</td><td>Each box wireless to the PC</td><td>All boxes on the phone hotspot</td></tr>
+        <tr><td>R8</td><td>Calibrated positions, measured accuracy and response</td><td>Jitter (cm), fix rate (Hz), reacquire time (s)</td></tr>
+      </tbody>
+    </table></div>
+    <div class="chips"><span class="chip sec">Report §1</span><span class="chip">docs/requirements.md</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">03</div>
+  <div class="body">
+    <h3>System architecture</h3>
+    <p class="msg">Boxes only aim and ping; every decision is made on the laptop.</p>
+    <ul>
+      <li>Diagram: 3 boxes (ESP32-WROOM-32E, SG90 servo, HC-SR04) → phone hotspot, UDP → laptop tracker → game display.</li>
+      <li>One measurement cycle: AIM → READY → FIRE → RANGE.</li>
+      <li>Only one box pings at a time, so the boxes do not hear each other's echoes.</li>
+    </ul>
+    <div class="chips"><span class="chip">README_1.html §1–2</span><span class="chip">docs/architecture.md</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">04</div>
+  <div class="body">
+    <h3>V1: how the two-servo tracker works</h3>
+    <p class="msg">Two bearings, two ranges, one point.</p>
+    <ul>
+      <li>Both servos aim at the same target point (θ₀, θ₁), then both boxes ping.</li>
+      <li>Position = forward intersection of the two range circles, plus the 0.18 m body radius.</li>
+      <li>Four acceptance gates: a real intersection, inside the field, no implausible jump, ranges not stale.</li>
+      <li>Show <a href="#calc-1">worked example 1</a> on this slide.</li>
+    </ul>
+    <div class="chips"><span class="chip sec">Report §2</span><span class="chip">README_1.html §3–4</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">05</div>
+  <div class="body">
+    <h3>V1 teardown: where it failed</h3>
+    <p class="msg">On the official 1.5 m field, V1 showed a dot only 14 % of the time.</p>
+    <ul>
+      <li><strong>Every fix needs both echoes at once.</strong> One miss from either box means no position (17.6 losses/min).</li>
+      <li><strong>Edges are out of reach.</strong> A player near one box is more than 1.7 m from the other, beyond reliable HC-SR04 range (<a href="#calc-2">example 2</a>).</li>
+      <li><strong>No one-box fallback.</strong> Partial information is thrown away.</li>
+      <li>On the 1.0 m bench (22 Sep) the same code reached 75 %. The failure is the geometry at full width, not a code bug.</li>
+    </ul>
+    <div class="chips"><span class="chip sec">Report §1</span><span class="chip">mvp1-bench-log-2026-09-23 run uni-field15-run2</span><span class="chip">mvp1-bench-log-2026-09-22 run bench-live15</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">06</div>
+  <div class="body">
+    <h3>Formal change register</h3>
+    <p class="msg">Each V1 failure is linked to one change and one measured result.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>#</th><th>V1 failure</th><th>Root cause</th><th>Change</th><th>Commit</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>C1</td><td>Dot 14 % on 1.5 m field</td><td>Fix needs two echoes in the same cycle</td><td>Independent sweep per box; any hit leads, others follow</td><td><code>1c9836b</code></td><td>Dot 89 %</td></tr>
+        <tr><td>C2</td><td>65 false "outside field" pauses</td><td>One-box fixes trusted like two-box fixes</td><td>Two-box rule for alerts, 0.4 m margin, 2 s latch</td><td><code>3ebfc40</code></td><td>0 false alerts</td></tr>
+        <tr><td>C3</td><td>Dot lagged and overshot on turns</td><td>Alpha-beta velocity prediction</td><td>Prediction removed; spot is last measured point, smoothed</td><td><code>84fc859</code></td><td>Jitter 7.3/5.1 → 2.1/2.4 cm</td></tr>
+        <tr><td>C4</td><td>Weak coverage near each box</td><td>Two boxes 1.5 m apart, 1.7 m reach</td><td>Third box in the middle; N-box protocol</td><td><code>99821f7</code>, <code>835964b</code></td><td>Fix from 2+ boxes 70 %</td></tr>
+        <tr><td>C5</td><td>Lost for 3–9 s after a long jump</td><td>1 s jitter round empty spot, then 5° sweep</td><td>Search after full loss, 15° steps toward field centre</td><td><code>8e81520</code></td><td>Reacquire median 0.51 → 0.21 s</td></tr>
+        <tr><td>C6</td><td>Player lost while standing still</td><td>Static echo and missed pings</td><td>Hold the player through a static echo</td><td><code>aee8ef0</code></td><td>12.4 → 1.2 losses/min (sim)</td></tr>
+        <tr><td>C7</td><td>Sensors read 4–6 cm in the box</td><td>Enclosure inside the beam</td><td>Sensor and servo outside the enclosure</td><td>22 Sep log #10</td><td>0 short bearings (was 43/46)</td></tr>
+      </tbody>
+    </table></div>
+    <div class="chips"><span class="chip sec">Report §1</span><span class="chip">docs/CHANGELOG.md</span><span class="chip">bench logs</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">07</div>
+  <div class="body">
+    <h3>Backlog integration</h3>
+    <p class="msg">Each fix became a Sprint 2 task with a numeric target.</p>
+    <ul>
+      <li>Format each as a task, not a user story: "Reacquire after a column jump: median under 2 s (sim), was 5.2 s."</li>
+      <li>Show the board columns (To do / In progress / Done) with the C1–C7 tasks and their target numbers.</li>
+      <li>Mention that each task was closed only when a bench log or recorded CSV showed the target was met.</li>
+    </ul>
+    <p class="flag">Use your team's real board screenshot and task IDs here. The repo does not hold them.</p>
+    <div class="chips"><span class="chip sec">Report §1</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">08</div>
+  <div class="body">
+    <h3>Mathematical model</h3>
+    <p class="msg">Why V1 fails statistically, and why reacquire time is set by the ping schedule, not the servo.</p>
+    <ul>
+      <li>Position accuracy from range error: <a href="#calc-3">example 3</a> (σx ≈ 1.2 cm, σy ≈ 0.9 cm).</li>
+      <li>Fix probability, both echoes vs any echo: <a href="#calc-4">example 4</a> (56 % vs 94 %).</li>
+      <li>Reacquire time budget: <a href="#calc-5">example 5</a> (model 1.40 s, simulator 1.44 s).</li>
+      <li>V2 fusion: choose p to minimise Σ (‖p − sᵢ‖ − rᵢ − R)² over the boxes that have an echo.</li>
+    </ul>
+    <div class="chips"><span class="chip sec">Report §2</span><span class="chip">docs/jump-bench-2026-10-02.md</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">09</div>
+  <div class="body">
+    <h3>Simulation calibration</h3>
+    <p class="msg">The simulator predicted the gains before any field run.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Bench</th><th>Metric</th><th>Before</th><th>After</th></tr></thead>
+      <tbody>
+        <tr><td>Jump bench, 640 trials</td><td>Skip-column jump, median first fix</td><td class="n v1">5.21 s</td><td class="n v2">1.43 s</td></tr>
+        <tr><td></td><td>Same, game gives the right hint</td><td class="n v1">5.21 s</td><td class="n v2">0.88 s</td></tr>
+        <tr><td></td><td>Skip-column trials over 2 s</td><td class="n v1">80 of 80</td><td class="n v2">0</td></tr>
+        <tr><td>Stand bench, 15 holes</td><td>Losses per minute</td><td class="n v1">12.4</td><td class="n v2">1.2</td></tr>
+        <tr><td></td><td>Time on the hole</td><td class="n v1">87 %</td><td class="n v2">99 %</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>Calibration check: the simulator's "before" variant gave the same times as commit <code>9799390</code> on eight jumps.</li>
+      <li>Plot: grouped bars, before vs after, one chart per bench.</li>
+    </ul>
+    <div class="chips"><span class="chip sec">Report §2</span><span class="chip">docs/jump-bench-2026-10-02.md</span><span class="chip">docs/stand-bench-2026-10-05.md</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">10</div>
+  <div class="body">
+    <h3>Physical testing: V1 vs V2 vs MVP</h3>
+    <p class="msg">Same field, same hotspot, same metric definitions.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Metric</th><th>V1 two-servo</th><th>V2 swarm</th><th>Change V1→V2</th><th>Current MVP</th></tr></thead>
+      <tbody>
+        <tr><td>Dot on screen</td><td class="n v1">14 %</td><td class="n v2">89 %</td><td class="n">6.4×</td><td class="gap">field run needed</td></tr>
+        <tr><td>Losses per minute</td><td class="n v1">17.6</td><td class="n v2">1.3</td><td class="n">−93 %</td><td class="gap">field run needed</td></tr>
+        <tr><td>Reacquire, median</td><td class="n v1">4.4 s</td><td class="n v2">1.4 s</td><td class="n">−68 %</td><td class="n v2">0.21 s</td></tr>
+        <tr><td>Fresh fix rate</td><td class="n v1">2.6 Hz</td><td class="n v2">6.6 Hz</td><td class="n">2.5×</td><td class="gap">field run needed</td></tr>
+        <tr><td>Jitter x / y</td><td class="n v1">0.3 / 0.5 cm*</td><td class="n v2">2.1 / 2.4 cm</td><td class="n">—</td><td class="gap">field run needed</td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li>Method: boxes on the sensor line at y = 0.5 m, field 1.5 m wide, 0.6–2.0 m deep, recorded at 0.1 s, metrics from <code>tools/session_metrics.py</code>.</li>
+      <li>MVP field result for the third box and search: reacquire median 0.51 → 0.21 s, p = 0.016 (permutation test, 20 000 shuffles); 90th percentile 2.25 → 1.12 s.</li>
+      <li>Show <code>results/report/reacquire_histogram.png</code>.</li>
+      <li>* V1 jitter looks better only because V1 rarely had a fix; say so.</li>
+    </ul>
+    <p class="flag">Record one walking run of the current MVP with <code>--record</code> and run <code>tools.session_metrics</code> to fill the empty column. In the last field run losses per minute rose (13.8 → 19.9) before the static-echo fix; present that honestly as the open issue.</p>
+    <div class="chips"><span class="chip sec">Report §3</span><span class="chip">mvp1-bench-log-2026-09-23</span><span class="chip">results/report/reacquire_table.md</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">11</div>
+  <div class="body">
+    <h3>Ruggedization and secondary features</h3>
+    <p class="msg">Tighter tolerances in firmware, wiring and set-up.</p>
+    <ul>
+      <li>Firmware: same pins on every box; build named by box position; aims clamped to the servo travel; servo ramp 150°/s so a large move does not rock the box.</li>
+      <li>Calibration: lost READY re-requested every 0.3 s; sweeps went from 0 of 3 completed to 111/111 pairs in 30 s.</li>
+      <li>Set-up: level and straighten each box before calibration (box 1 echo rate 35 % → 85 %).</li>
+      <li>Network: phone hotspot only, because university Wi-Fi blocked UDP.</li>
+      <li>Secondary feature: dead-zone buzzer box with retry, for the safety requirement.</li>
+      <li>UN SDG link: low-power ESP32 parts, components returned unmodified with no solder (R10), reusable rechargeable cells.</li>
+    </ul>
+    <div class="chips"><span class="chip sec">Report §3</span><span class="chip">docs/CHANGELOG.md</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">12</div>
+  <div class="body">
+    <h3>CPD and knowledge gaps</h3>
+    <p class="msg">What I did not know at V1, and what I did about it.</p>
+    <ul>
+      <li>Ultrasonic beam behaviour: multipath and static echoes. Action: bench sketch with one servo and one sensor, echo-rate tables by distance.</li>
+      <li>Error propagation and least-squares fusion. Action: worked the circle-intersection derivatives (example 3).</li>
+      <li>Simulation as a test tool. Action: built the jump and stand benches on a simulated clock so results repeat exactly.</li>
+      <li>Statistics for small samples. Action: one-sided permutation test for the reacquire times.</li>
+    </ul>
+    <p class="flag">Rewrite these in your own words. The marker wants an honest personal reflection.</p>
+    <div class="chips"><span class="chip sec">Report §4</span></div>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">13</div>
+  <div class="body">
+    <h3>Demo and next steps</h3>
+    <p class="msg">Show the dot following a player, then the plan.</p>
+    <ul>
+      <li>30 s video or live demo: walk across all three columns, jump one column, stand still on a hole.</li>
+      <li>Next: MVP walking field run; fix the 0.4 s stall when one UDP reply is lost; connect the tracker to the game.</li>
+    </ul>
+  </div>
+</article>
+
+<article class="slide">
+  <div class="num">+</div>
+  <div class="body">
+    <h3>Backup slides</h3>
+    <ul>
+      <li>Raw metric tables from both bench logs.</li>
+      <li>Full derivations below (examples 1–5).</li>
+      <li>How to reproduce: <code>python3 -m tools.jump_bench --csv results/jump-bench-2026-10-02.csv --timeline</code>.</li>
+      <li>References: ES3 brief v2.1; HC-SR04, SG90 and ESP32-WROOM-32E datasheets; P. Good, <em>Permutation, Parametric and Bootstrap Tests of Hypotheses</em>, Springer, 2005.</li>
+    </ul>
+    <div class="chips"><span class="chip sec">Report §5</span></div>
+  </div>
+</article>
+
+<h2>Worked calculations</h2>
+<p class="lede">Geometry used throughout: origin on the wall at the left edge of the field, x to the right, y away from the wall. V1 boxes at s₀ = (0, 0.2) and s₁ = (1.5, 0.2), so baseline b = 1.5 m and sensor line y_s = 0.2 m. Body radius R = 0.18 m.</p>
+
+<section class="calc" id="calc-1">
+  <span class="eyebrow">Example 1 · slide 04</span>
+  <h3>V1 position from two ranges</h3>
+  <div class="split">
+    <div style="display:grid;gap:12px;min-width:0">
+      <p>Player centre at (0.40, 1.20) m. Each HC-SR04 measures to the body surface, so the tracker adds R to get the distance to the centre.</p>
+      <div class="eq">Bearings the servos are sent to:
+θ₀ = atan2(1.20 − 0.20, 0.40 − 0)    = 68.2°
+θ₁ = atan2(1.20 − 0.20, 0.40 − 1.50) = 137.7°
+
+Measured (surface) ranges:   d₀ = 0.897 m   d₁ = 1.307 m
+Centre ranges r = d + R:     r₀ = 1.077 m   r₁ = 1.487 m</div>
+      <div class="eq">x = (r₀² − r₁² + b²) / (2b)
+  = (1.160 − 2.210 + 2.250) / 3.0
+  = 1.200 / 3.0 = 0.400 m
+
+h = √(r₀² − x²) = √(1.160 − 0.160) = 1.000 m
+y = y_s + h = 0.20 + 1.00 = 1.200 m</div>
+      <p class="result">Recovered position (0.400, 1.200) m, equal to the true position. All four gates pass: h² &gt; 0, inside the field, no jump, fresh ranges.</p>
+    </div>
+    <figure>
+      <svg viewBox="0 0 380 470" role="img" aria-label="Two range circles from boxes at the left and right ends of the sensor line cross at the player; a second player at the left edge is outside the right box's 1.7 m reach.">
+        <defs><clipPath id="clipf"><rect x="0" y="30" width="380" height="440"/></clipPath></defs>
+        <rect class="svg-field" x="40" y="150" width="300" height="280"/>
+        <line class="svg-wall" x1="20" y1="30" x2="360" y2="30"/>
+        <text class="svg-t" x="24" y="22">screen wall, y = 0</text>
+        <g clip-path="url(#clipf)">
+          <circle class="svg-c0" cx="40" cy="70" r="215.4"/>
+          <circle class="svg-c1" cx="340" cy="70" r="297.3"/>
+          <circle class="svg-reach" cx="340" cy="70" r="340"/>
+        </g>
+        <rect class="svg-box" x="32" y="62" width="16" height="16"/>
+        <rect class="svg-box" x="332" y="62" width="16" height="16"/>
+        <text class="svg-tk" x="54" y="66">box 0</text>
+        <text class="svg-tk" x="284" y="66">box 1</text>
+        <circle class="svg-player" cx="120" cy="270" r="6"/>
+        <text class="svg-tk" x="130" y="266">(0.40, 1.20)</text>
+        <circle class="svg-edge" cx="60" cy="390" r="6"/>
+        <text class="svg-tk" x="72" y="394">(0.10, 1.80)</text>
+        <text class="svg-t" x="190" y="452">dashed: 1.7 m reach of box 1</text>
+        <text class="svg-t" x="190" y="166">field 0.6–2.0 m</text>
+      </svg>
+      <figcaption>To scale, 1 m = 200 px. Solid circles: r₀ and r₁ cross at the player. The hollow marker is example 2.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="calc" id="calc-2">
+  <span class="eyebrow">Example 2 · slide 05</span>
+  <h3>Why V1 loses the player at the edge</h3>
+  <p>Player at the left edge, deep in the field, (0.10, 1.80) m.</p>
+  <div class="eq">r₀ = √(0.10² + 1.60²)          = 1.603 m   within 1.7 m reach
+r₁ = √((0.10 − 1.50)² + 1.60²) = √(1.96 + 2.56) = 2.126 m   beyond 1.7 m reach</div>
+  <p class="result bad">Box 1 gets no reliable echo, so V1 has no fix at all. V2 shows a one-box fix from box 0, and the current MVP adds the middle box at x = 0.75 m, which is 1.71 m away.</p>
+</section>
+
+<section class="calc" id="calc-3">
+  <span class="eyebrow">Example 3 · slide 08</span>
+  <h3>Position error from range error</h3>
+  <p>Differentiate the intersection formulas. With b fixed and h = y − y_s:</p>
+  <div class="eq">∂x/∂r₀ =  r₀ / b                 ∂x/∂r₁ = −r₁ / b
+∂y/∂r₀ =  r₀ (1 − x/b) / h       ∂y/∂r₁ =  x r₁ / (b h)
+
+σx = σr · √(r₀² + r₁²) / b
+σy = σr · √( (∂y/∂r₀)² + (∂y/∂r₁)² )</div>
+  <p>At the example 1 point, with a range noise of σr = 1 cm per sensor:</p>
+  <div class="eq">σx = 1 cm × √(1.160 + 2.210) / 1.5 = 1 cm × 1.224 = 1.2 cm
+∂y/∂r₀ = 1.077 × (1 − 0.267) / 1.0 = 0.790
+∂y/∂r₁ = 0.40 × 1.487 / (1.5 × 1.0) = 0.396
+σy = 1 cm × √(0.790² + 0.396²)   = 1 cm × 0.884 = 0.9 cm</div>
+  <p class="result">Predicted 1.2 cm in x and 0.9 cm in y. Measured standing jitter on 22 Sep (bench-live15): 2.2 cm and 0.7 cm. x error is larger because both range errors add into x; the body moving adds the rest.</p>
+</section>
+
+<section class="calc" id="calc-4">
+  <span class="eyebrow">Example 4 · slide 08</span>
+  <h3>Both echoes vs any echo</h3>
+  <p>Simple model: each box returns a usable echo with probability p, independently. Echo rates from swarm-run3: p₀ = 0.75, p₁ = 0.74.</p>
+  <div class="eq">V1 needs both:   P = p₀ · p₁             = 0.75 × 0.74       = 0.555
+V2 needs one:    P = 1 − (1 − p₀)(1 − p₁) = 1 − 0.25 × 0.26  = 0.935</div>
+  <p class="result">Even in the middle of the field, requiring both echoes drops the chance of a fix from 94 % to 56 % per cycle. Add the edge cases from example 2 and V1 falls to the measured 14 %. V2 measured 89 %, close to the 94 % model.</p>
+</section>
+
+<section class="calc" id="calc-5">
+  <span class="eyebrow">Example 5 · slide 08</span>
+  <h3>Reacquire time budget</h3>
+  <p>Only one box may ping at a time. A searching ping takes T_slot = 0.10 s (25 ms echo timeout, 65 ms acoustic guard, 10 ms poll). With N = 3 boxes:</p>
+  <div class="eq">T_step = N · T_slot = 3 × 0.10 s = 0.30 s per step, per box
+
+T ≈ T_start + n · T_step + T_confirm,   T_confirm = T_step</div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Box 2, column 1 → 3</th><th>T_start</th><th>Steps n</th><th>n · T_step</th><th>T_confirm</th><th>Model</th><th>Simulator</th></tr></thead>
+    <tbody>
+      <tr><td>Before: jitter, then 5° sweep</td><td class="n">1.30 s</td><td class="n">6</td><td class="n">1.80 s</td><td class="n">0.30 s</td><td class="n v1">3.40 s</td><td class="n">3.64 s</td></tr>
+      <tr><td>After: search, 15° steps</td><td class="n">0.50 s</td><td class="n">2</td><td class="n">0.60 s</td><td class="n">0.30 s</td><td class="n v2">1.40 s</td><td class="n">1.44 s</td></tr>
+    </tbody>
+  </table></div>
+  <p class="result">The model lands within 0.25 s of the simulator. The step period is fixed by the ping schedule, so the only ways to go faster are to start the search sooner and to take bigger steps. That is exactly change C5.</p>
+</section>
+
+<section class="calc">
+  <span class="eyebrow">Percent improvement</span>
+  <h3>How the headline numbers are calculated</h3>
+  <div class="eq">Losses:   (17.6 − 1.3) / 17.6 = 0.926  →  −93 %
+Reacquire: (4.4 − 1.4) / 4.4  = 0.682  →  −68 %
+Dot:       89 / 14            = 6.4×
+Fix rate:  6.6 / 2.6          = 2.5×</div>
+</section>
+
+<p class="foot">Sources: docs/mvp1-bench-log-2026-09-22.md, docs/mvp1-bench-log-2026-09-23.md, docs/jump-bench-2026-10-02.md, docs/stand-bench-2026-10-05.md, results/report/reacquire_table.md, README_1.html. Raw CSVs for the 22–23 Sep runs are not in the repo; cite the bench logs for those figures.</p>
+
+</main>
+</body>
+</html>
