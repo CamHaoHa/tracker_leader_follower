@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Arial, Helvetica, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs>
+<rect width="1600" height="900" fill="#ffffff"/>
+<text x="60" y="62" font-size="34" font-weight="bold" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Each change, measured — before vs after</text>
+<text x="60" y="96" font-size="18" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">each panel has its own scale · orange = before, teal = after</text>
+<rect x="50" y="140" width="280" height="740" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="190.0" y="180" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">V1 → swarm</text>
+<text x="190.0" y="206" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">dot shown (%)</text>
+<text x="190.0" y="232" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">↑ better</text>
+<path d="M100,720 L100,668.4234404536862 Q100,664.4234404536862 104,664.4234404536862 L176,664.4234404536862 Q180,664.4234404536862 180,668.4234404536862 L180,720 Z" fill="#c2410c"/>
+<text x="140" y="654.4234404536862" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">14%</text>
+<text x="140" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">V1 pairs</text>
+<path d="M200,720 L200,358.7826086956522 Q200,354.7826086956522 204,354.7826086956522 L276,354.7826086956522 Q280,354.7826086956522 280,358.7826086956522 L280,720 Z" fill="#0891b2"/>
+<text x="240" y="344.7826086956522" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">92%</text>
+<text x="240" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">swarm</text>
+<line x1="80" y1="720" x2="300" y2="720" stroke="#5b6a74" stroke-width="1.5"/>
+<text x="190.0" y="800" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">field, 23 Sep</text>
+<text x="190.0" y="845" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">6.6× higher</text>
+<rect x="355" y="140" width="280" height="740" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="495.0" y="180" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Prediction removed</text>
+<text x="495.0" y="206" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">two-box fixes (%)</text>
+<text x="495.0" y="232" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">↑ better</text>
+<path d="M405,720 L405,514.537084398977 Q405,510.53708439897696 409,510.53708439897696 L481,510.53708439897696 Q485,510.53708439897696 485,514.537084398977 L485,720 Z" fill="#c2410c"/>
+<text x="445" y="500.53708439897696" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">39%</text>
+<text x="445" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">with</text>
+<path d="M505,720 L505,358.78260869565213 Q505,354.78260869565213 509,354.78260869565213 L581,354.78260869565213 Q585,354.78260869565213 585,358.78260869565213 L585,720 Z" fill="#0891b2"/>
+<text x="545" y="344.78260869565213" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">68%</text>
+<text x="545" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">without</text>
+<line x1="385" y1="720" x2="605" y2="720" stroke="#5b6a74" stroke-width="1.5"/>
+<text x="495.0" y="800" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">field, 23 Sep</text>
+<text x="495.0" y="845" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">1.7× higher</text>
+<rect x="660" y="140" width="280" height="740" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="800.0" y="180" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Search after loss</text>
+<text x="800.0" y="206" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">jump recovery (s)</text>
+<text x="800.0" y="232" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">↓ better</text>
+<path d="M710,720 L710,358.78260869565213 Q710,354.78260869565213 714,354.78260869565213 L786,354.78260869565213 Q790,354.78260869565213 790,358.78260869565213 L790,720 Z" fill="#c2410c"/>
+<text x="750" y="344.78260869565213" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">3.64 s</text>
+<text x="750" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">sweep</text>
+<path d="M810,720 L810,579.5183946488294 Q810,575.5183946488294 814,575.5183946488294 L886,575.5183946488294 Q890,575.5183946488294 890,579.5183946488294 L890,720 Z" fill="#0891b2"/>
+<text x="850" y="565.5183946488294" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">1.44 s</text>
+<text x="850" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">search</text>
+<line x1="690" y1="720" x2="910" y2="720" stroke="#5b6a74" stroke-width="1.5"/>
+<text x="800.0" y="800" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">simulator, 2 Oct</text>
+<text x="800.0" y="845" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">2.5× lower</text>
+<rect x="965" y="140" width="280" height="740" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="1105.0" y="180" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Search + mole hint</text>
+<text x="1105.0" y="206" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">median reacquire (s)</text>
+<text x="1105.0" y="232" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">↓ better</text>
+<path d="M1015,720 L1015,358.7826086956521 Q1015,354.7826086956521 1019,354.7826086956521 L1091,354.7826086956521 Q1095,354.7826086956521 1095,358.7826086956521 L1095,720 Z" fill="#c2410c"/>
+<text x="1055" y="344.7826086956521" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">0.51 s</text>
+<text x="1055" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">V1</text>
+<path d="M1115,720 L1115,573.616368286445 Q1115,569.616368286445 1119,569.616368286445 L1191,569.616368286445 Q1195,569.616368286445 1195,573.616368286445 L1195,720 Z" fill="#0891b2"/>
+<text x="1155" y="559.616368286445" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">0.21 s</text>
+<text x="1155" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">V2</text>
+<line x1="995" y1="720" x2="1215" y2="720" stroke="#5b6a74" stroke-width="1.5"/>
+<text x="1105.0" y="800" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">field, p = 0.016</text>
+<text x="1105.0" y="845" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">2.4× lower</text>
+<rect x="1270" y="140" width="280" height="740" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="1410.0" y="180" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Ghost-echo hold</text>
+<text x="1410.0" y="206" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">losses per minute</text>
+<text x="1410.0" y="232" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">↓ better</text>
+<path d="M1320,720 L1320,358.78260869565213 Q1320,354.78260869565213 1324,354.78260869565213 L1396,354.78260869565213 Q1400,354.78260869565213 1400,358.78260869565213 L1400,720 Z" fill="#c2410c"/>
+<text x="1360" y="344.78260869565213" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">12.4</text>
+<text x="1360" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">before</text>
+<path d="M1420,720 L1420,688.656381486676 Q1420,684.656381486676 1424,684.656381486676 L1496,684.656381486676 Q1500,684.656381486676 1500,688.656381486676 L1500,720 Z" fill="#0891b2"/>
+<text x="1460" y="674.656381486676" font-size="22" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">1.2</text>
+<text x="1460" y="746" font-size="16" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">after</text>
+<line x1="1300" y1="720" x2="1520" y2="720" stroke="#5b6a74" stroke-width="1.5"/>
+<text x="1410.0" y="800" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">simulator, 5 Oct</text>
+<text x="1410.0" y="845" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">10.3× lower</text>
+</svg>

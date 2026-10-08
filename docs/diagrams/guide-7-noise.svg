@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Arial, Helvetica, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs>
+<rect width="1600" height="900" fill="#ffffff"/>
+<text x="60" y="62" font-size="34" font-weight="bold" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Noise reduction, layer by layer</text>
+<text x="60" y="96" font-size="18" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">nothing averages pings on the box; each layer removes a different kind of error</text>
+<rect x="150" y="130" width="1400" height="82" rx="8" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<rect x="150" y="130" width="200" height="82" rx="8" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+<text x="250" y="178.0" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Firmware</text>
+<text x="375" y="164" font-size="17" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">no trigger while ECHO high · 25 ms timeout, 20–4000 mm · lease 1000 ms, 65 ms gap · ramp 150 °/s, settle ≤ 700 ms</text>
+<text x="375" y="192" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">removes: overlapping pings, impossible values, stale or doubled pings, pinging mid-swing</text>
+<rect x="150" y="221" width="1400" height="82" rx="8" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<rect x="150" y="221" width="200" height="82" rx="8" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2"/>
+<text x="250" y="269.0" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Schedule</text>
+<text x="375" y="255" font-size="17" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">one ping in the air + 65 ms acoustic guard</text>
+<text x="375" y="283" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">removes: cross-talk between boxes</text>
+<rect x="150" y="312" width="1400" height="82" rx="8" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<rect x="150" y="312" width="200" height="82" rx="8" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2"/>
+<text x="250" y="360.0" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Timing</text>
+<text x="375" y="346" font-size="17" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">reject a reading whose timing window is too wide (−3 ms … 0.12 s)</text>
+<text x="375" y="374" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">removes: delayed packets</text>
+<rect x="150" y="403" width="1400" height="82" rx="8" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<rect x="150" y="403" width="200" height="82" rx="8" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2"/>
+<text x="250" y="451.0" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Calibration</text>
+<text x="375" y="437" font-size="17" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">empty-room map: median of 3 pings per bearing, ≥ 2 valid</text>
+<text x="375" y="465" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">removes: walls, tables, floor</text>
+<rect x="150" y="494" width="1400" height="82" rx="8" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<rect x="150" y="494" width="200" height="82" rx="8" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2"/>
+<text x="250" y="542.0" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Classify</text>
+<text x="375" y="528" font-size="17" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">static-echo band ±0.15 m, ±10° · range gates 0.10 / 1.7 m · body radius 0.18 m · confirm ping</text>
+<text x="375" y="556" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">removes: room echoes, unreliable far echoes, surface-vs-centre bias, one-off reflections</text>
+<rect x="150" y="585" width="1400" height="82" rx="8" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<rect x="150" y="585" width="200" height="82" rx="8" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2"/>
+<text x="250" y="633.0" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Fusion</text>
+<text x="375" y="619" font-size="17" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">residual ≤ 0.30 m + beam check 20° + 10° · largest agreeing group, outvote · fresh ≤ 0.6 s</text>
+<text x="375" y="647" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">removes: ghost intersections, one box with a bad echo, stale positions</text>
+<rect x="150" y="676" width="1400" height="82" rx="8" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<rect x="150" y="676" width="200" height="82" rx="8" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2"/>
+<text x="250" y="724.0" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Filter</text>
+<text x="375" y="710" font-size="17" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">jump gate 3 m/s · dt + 0.3 m · exponential smoothing τ 0.12 s, half weight for one box</text>
+<text x="375" y="738" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">removes: physically impossible moves, range jitter</text>
+<rect x="150" y="767" width="1400" height="82" rx="8" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<rect x="150" y="767" width="200" height="82" rx="8" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2"/>
+<text x="250" y="815.0" font-size="20" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Alerts</text>
+<text x="375" y="801" font-size="17" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">debounce 0.3 / 0.5 / 1.0 s, then a 2 s latch</text>
+<text x="375" y="829" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">removes: flickering warnings</text>
+<text x="110" y="177.0" font-size="17" font-weight="bold" fill="#d97706" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">box</text>
+<path d="M130,225 L118,225 L118,845 L130,845" fill="none" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="100" y="535.0" font-size="17" font-weight="bold" fill="#0e8a9b" text-anchor="middle" transform="rotate(-90 100 535.0)">laptop</text>
+<path d="M75,140 L75,839" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="60" y="875" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">raw ping at the top → clean spot on screen at the bottom</text>
+</svg>

@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Arial, Helvetica, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs>
+<rect width="1600" height="900" fill="#ffffff"/>
+<text x="60" y="62" font-size="34" font-weight="bold" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Tracker pipeline — one loop of the swarm tracker</text>
+<text x="60" y="96" font-size="18" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">whack/swarm.py · runs on the laptop every poll; each box gets a new bearing as soon as its last ping is done</text>
+<rect x="50" y="190" width="220" height="175" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="160.0" y="220" font-size="14" font-weight="bold" fill="#0e8a9b" text-anchor="middle" font-family="Consolas, 'Courier New', monospace">1 · AIM</text>
+<text x="160.0" y="248" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Choose bearing</text>
+<text x="160.0" y="276" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">hold · aimed · jitter</text>
+<text x="160.0" y="298" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">sweep 5° · search 15°</text>
+<text x="160.0" y="320" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">per box, own arc</text>
+<path d="M272,278 L304,278" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<rect x="306" y="190" width="220" height="175" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="416.0" y="220" font-size="14" font-weight="bold" fill="#0e8a9b" text-anchor="middle" font-family="Consolas, 'Courier New', monospace">2 · PING</text>
+<text x="416.0" y="248" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">One box at a time</text>
+<text x="416.0" y="276" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">AIM → READY →</text>
+<text x="416.0" y="298" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">FIRE → RANGE</text>
+<text x="416.0" y="320" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">65 ms acoustic guard</text>
+<path d="M528,278 L560,278" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<rect x="562" y="190" width="220" height="175" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="672.0" y="220" font-size="14" font-weight="bold" fill="#0e8a9b" text-anchor="middle" font-family="Consolas, 'Courier New', monospace">3 · CLASSIFY</text>
+<text x="672.0" y="248" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Is it the player?</text>
+<text x="672.0" y="276" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">range 0.10–1.7 m</text>
+<text x="672.0" y="298" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">not the room map</text>
+<text x="672.0" y="320" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">confirm ping</text>
+<path d="M784,278 L816,278" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<rect x="818" y="190" width="220" height="175" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="928.0" y="220" font-size="14" font-weight="bold" fill="#0e8a9b" text-anchor="middle" font-family="Consolas, 'Courier New', monospace">4 · FUSE</text>
+<text x="928.0" y="248" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Combine boxes</text>
+<text x="928.0" y="276" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Gauss-Newton on</text>
+<text x="928.0" y="298" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">range circles</text>
+<text x="928.0" y="320" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">residual ≤ 0.30 m</text>
+<path d="M1040,278 L1072,278" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<rect x="1074" y="190" width="220" height="175" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="1184.0" y="220" font-size="14" font-weight="bold" fill="#0e8a9b" text-anchor="middle" font-family="Consolas, 'Courier New', monospace">5 · FILTER</text>
+<text x="1184.0" y="248" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Gate + smooth</text>
+<text x="1184.0" y="276" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">jump ≤ 3 m/s·dt + 0.3 m</text>
+<text x="1184.0" y="298" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">exponential, τ 0.12 s</text>
+<text x="1184.0" y="320" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">no velocity term</text>
+<path d="M1296,278 L1328,278" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<rect x="1330" y="190" width="220" height="175" rx="14" fill="#e1f0e4" stroke="#2d7a3e" stroke-width="2.5"/>
+<text x="1440.0" y="220" font-size="14" font-weight="bold" fill="#0e8a9b" text-anchor="middle" font-family="Consolas, 'Courier New', monospace">6 · ACT</text>
+<text x="1440.0" y="248" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Steer and warn</text>
+<text x="1440.0" y="276" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">other boxes aim</text>
+<text x="1440.0" y="298" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">at the fix</text>
+<text x="1440.0" y="320" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">alerts + buzzer</text>
+<path d="M1440.0,365 L1440.0,440 L160.0,440 L160.0,367" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="800.0" y="430" font-size="17" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">next poll: every box that finished its ping gets a new bearing</text>
+<text x="60" y="560" font-size="22" font-weight="bold" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Key constants</text>
+<rect x="50" y="580" width="220" height="120" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="160" y="635" font-size="34" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">5° / 15°</text>
+<text x="160" y="670" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">sweep / search step</text>
+<rect x="306" y="580" width="220" height="120" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="416" y="635" font-size="34" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">0.30 s</text>
+<text x="416" y="670" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">per bearing, 3 boxes</text>
+<rect x="562" y="580" width="220" height="120" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="672" y="635" font-size="34" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">1.7 m</text>
+<text x="672" y="670" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">reliable range</text>
+<rect x="818" y="580" width="220" height="120" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="928" y="635" font-size="34" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">0.30 m</text>
+<text x="928" y="670" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">fusion residual</text>
+<rect x="1074" y="580" width="220" height="120" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="1184" y="635" font-size="34" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">0.12 s</text>
+<text x="1184" y="670" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">smoothing τ</text>
+<rect x="1330" y="580" width="220" height="120" rx="10" fill="#ffffff" stroke="#d3dbe1" stroke-width="1.5"/>
+<text x="1440" y="635" font-size="34" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">0.5 s</text>
+<text x="1440" y="670" font-size="16" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">no fix → lost</text>
+<rect x="50" y="740" width="1500" height="110" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="66" y="768" font-size="16" font-weight="bold" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Laptop owns every decision</text>
+<text x="66" y="792" font-size="16" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Boxes only move the servo and ping when told (firmware has no tracking logic).</text>
+<text x="66" y="814" font-size="16" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Cleaning happens on the laptop, where readings from all boxes can be compared.</text>
+</svg>

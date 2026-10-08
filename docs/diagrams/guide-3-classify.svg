@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Arial, Helvetica, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs>
+<rect width="1600" height="900" fill="#ffffff"/>
+<text x="60" y="62" font-size="34" font-weight="bold" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Classifying a reading — is it the player?</text>
+<text x="60" y="96" font-size="18" font-weight="normal" fill="#5b6a74" text-anchor="start" font-family="Arial, Helvetica, sans-serif">whack/swarm.py:504-528 · checks run in this order on every RANGE reply</text>
+<rect x="40" y="245" width="160" height="100" rx="14" fill="#eef1f4" stroke="#374151" stroke-width="2.5"/>
+<text x="120.0" y="275" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">RANGE</text>
+<text x="120.0" y="303" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">reply from</text>
+<text x="120.0" y="324" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">one box</text>
+<rect x="245" y="245" width="215" height="100" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="352.5" y="285" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Status OK?</text>
+<text x="352.5" y="312" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">not timeout / invalid</text>
+<path d="M202,305 L243,305" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<path d="M352.5,347 L352.5,448" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="362.5" y="405" font-size="15" font-weight="bold" fill="#c2410c" text-anchor="start" font-family="Arial, Helvetica, sans-serif">no</text>
+<rect x="245" y="450" width="215" height="120" rx="14" fill="#eef1f4" stroke="#374151" stroke-width="2.5"/>
+<text x="352.5" y="480" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Miss</text>
+<text x="352.5" y="508" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">no echo / invalid</text>
+<text x="352.5" y="529" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">last echo kept</text>
+<rect x="505" y="245" width="215" height="100" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="612.5" y="285" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">d ≥ 0.10 m?</text>
+<text x="612.5" y="312" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">player not on the box</text>
+<path d="M462,305 L503,305" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="482.5" y="278" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">yes</text>
+<path d="M612.5,347 L612.5,448" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="622.5" y="405" font-size="15" font-weight="bold" fill="#c2410c" text-anchor="start" font-family="Arial, Helvetica, sans-serif">no</text>
+<rect x="505" y="450" width="215" height="120" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+<text x="612.5" y="480" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Too close</text>
+<text x="612.5" y="508" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">alert input</text>
+<text x="612.5" y="529" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">0.3 s → banner, buzzer</text>
+<rect x="765" y="245" width="215" height="100" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="872.5" y="285" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Unlike the room map?</text>
+<text x="872.5" y="312" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">±10°, ±0.15 m band</text>
+<path d="M722,305 L763,305" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="742.5" y="278" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">yes</text>
+<path d="M872.5,347 L872.5,448" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="882.5" y="405" font-size="15" font-weight="bold" fill="#c2410c" text-anchor="start" font-family="Arial, Helvetica, sans-serif">no</text>
+<rect x="765" y="450" width="215" height="120" rx="14" fill="#eef1f4" stroke="#374151" stroke-width="2.5"/>
+<text x="872.5" y="480" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Miss: the room</text>
+<text x="872.5" y="508" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">wall, table, floor</text>
+<text x="872.5" y="529" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">from calibration</text>
+<rect x="1025" y="245" width="215" height="100" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="1132.5" y="285" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">d ≤ 1.7 m?</text>
+<text x="1132.5" y="312" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">reliable range</text>
+<path d="M982,305 L1023,305" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1002.5" y="278" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">yes</text>
+<path d="M1132.5,347 L1132.5,448" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1142.5" y="405" font-size="15" font-weight="bold" fill="#c2410c" text-anchor="start" font-family="Arial, Helvetica, sans-serif">no</text>
+<rect x="1025" y="450" width="215" height="120" rx="14" fill="#eef1f4" stroke="#374151" stroke-width="2.5"/>
+<text x="1132.5" y="480" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Hint only</text>
+<text x="1132.5" y="508" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">too far to trust</text>
+<text x="1132.5" y="529" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">treated as a miss</text>
+<rect x="1285" y="245" width="215" height="100" rx="14" fill="#dcf0f3" stroke="#0e8a9b" stroke-width="2.5"/>
+<text x="1392.5" y="285" font-size="19" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Repeats last echo?</text>
+<text x="1392.5" y="312" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">16°, 0.10 m, 1.5 s</text>
+<path d="M1242,305 L1283,305" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1262.5" y="278" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">yes</text>
+<path d="M1392.5,347 L1392.5,448" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1402.5" y="405" font-size="15" font-weight="bold" fill="#2d7a3e" text-anchor="start" font-family="Arial, Helvetica, sans-serif">yes</text>
+<rect x="1285" y="450" width="215" height="120" rx="14" fill="#e1f0e4" stroke="#2d7a3e" stroke-width="2.5"/>
+<text x="1392.5" y="480" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">RELIABLE</text>
+<text x="1392.5" y="508" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">used for a fix</text>
+<text x="1392.5" y="529" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">→ fusion</text>
+<path d="M1502,300 L1560,300 L1560,700 L1502,700" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1548" y="520" font-size="15" font-weight="bold" fill="#c2410c" text-anchor="end" font-family="Arial, Helvetica, sans-serif">no</text>
+<rect x="1285" y="640" width="215" height="120" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+<text x="1392.5" y="670" font-size="21" font-weight="bold" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">Candidate</text>
+<text x="1392.5" y="698" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">ping the same</text>
+<text x="1392.5" y="719" font-size="15" font-weight="normal" fill="#5b6a74" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">bearing once more</text>
+<path d="M1283,700 L120,700 L120,347" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="640" y="690" font-size="17" font-weight="normal" fill="#16202a" text-anchor="middle" font-family="Arial, Helvetica, sans-serif">repeat at the same bearing: costs one ping (0.30 s)</text>
+<rect x="40" y="785" width="1520" height="85" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="56" y="813" font-size="15" font-weight="bold" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">Why the confirm ping</text>
+<text x="56" y="837" font-size="15" font-weight="normal" fill="#16202a" text-anchor="start" font-family="Arial, Helvetica, sans-serif">A single echo can be a reflection or noise; asking for the same range twice removes most one-off ghosts. Match widened 5° → 16° (aee8ef0) so jitter steps no longer break it.</text>
+</svg>

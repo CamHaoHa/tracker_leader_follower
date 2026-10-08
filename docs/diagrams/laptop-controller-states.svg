@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" font-family="Arial, Helvetica, sans-serif">
+<defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#374151"/></marker></defs>
+<rect width="1600" height="900" fill="#ffffff"/>
+<text x="60" y="62" font-size="34" font-weight="bold" fill="#1f2937">Laptop state machine — tracker controller</text>
+<text x="60" y="96" font-size="18" fill="#4b5563">whack/swarm.py · SwarmController.poll() runs every UI frame; one ping in the air at a time</text>
+<circle cx="70" cy="200" r="13" fill="#1f2937"/>
+<path d="M83,200 L118,200" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<rect x="120" y="150" width="300" height="100" rx="18" fill="#f3f4f6" stroke="#6b7280" stroke-width="3"/>
+<text x="270.0" y="184" font-size="24" font-weight="bold" fill="#1f2937" text-anchor="middle">Waiting for boxes</text>
+<text x="270.0" y="212" font-size="16" fill="#4b5563" text-anchor="middle">&lt; 2 boxes online</text>
+<text x="270.0" y="234" font-size="16" fill="#4b5563" text-anchor="middle">listen UDP 4210 beacons</text>
+<rect x="120" y="400" width="300" height="100" rx="18" fill="#f3f4f6" stroke="#6b7280" stroke-width="3"/>
+<text x="270.0" y="434" font-size="24" font-weight="bold" fill="#1f2937" text-anchor="middle">Needs calibration</text>
+<text x="270.0" y="462" font-size="16" fill="#4b5563" text-anchor="middle">no empty-room map</text>
+<text x="270.0" y="484" font-size="16" fill="#4b5563" text-anchor="middle">on disk</text>
+<rect x="120" y="650" width="300" height="120" rx="18" fill="#fef3c7" stroke="#d97706" stroke-width="3"/>
+<text x="270.0" y="684" font-size="24" font-weight="bold" fill="#1f2937" text-anchor="middle">Calibrating</text>
+<text x="270.0" y="712" font-size="16" fill="#4b5563" text-anchor="middle">area kept empty</text>
+<text x="270.0" y="734" font-size="16" fill="#4b5563" text-anchor="middle">every sweep bearing × 3 pings</text>
+<text x="270.0" y="756" font-size="16" fill="#4b5563" text-anchor="middle">median range = wall echo</text>
+<rect x="700" y="145" width="320" height="120" rx="18" fill="#dbeafe" stroke="#2563eb" stroke-width="3"/>
+<text x="860.0" y="179" font-size="24" font-weight="bold" fill="#1f2937" text-anchor="middle">Find</text>
+<text x="860.0" y="207" font-size="16" fill="#4b5563" text-anchor="middle">no player fix</text>
+<text x="860.0" y="229" font-size="16" fill="#4b5563" text-anchor="middle">boxes sweep / search arcs</text>
+<text x="860.0" y="251" font-size="16" fill="#4b5563" text-anchor="middle">look for a reliable echo</text>
+<rect x="1220" y="145" width="320" height="120" rx="18" fill="#dcfce7" stroke="#16a34a" stroke-width="3"/>
+<text x="1380.0" y="179" font-size="24" font-weight="bold" fill="#1f2937" text-anchor="middle">Track</text>
+<text x="1380.0" y="207" font-size="16" fill="#4b5563" text-anchor="middle">player (x, y) estimate</text>
+<text x="1380.0" y="229" font-size="16" fill="#4b5563" text-anchor="middle">fuse ranges, aim all boxes</text>
+<text x="1380.0" y="251" font-size="16" fill="#4b5563" text-anchor="middle">alerts + buzzer active</text>
+<rect x="700" y="650" width="320" height="120" rx="18" fill="#e5e7eb" stroke="#374151" stroke-width="3"/>
+<text x="860.0" y="684" font-size="24" font-weight="bold" fill="#1f2937" text-anchor="middle">Paused</text>
+<text x="860.0" y="712" font-size="16" fill="#4b5563" text-anchor="middle">no pings sent</text>
+<text x="860.0" y="734" font-size="16" fill="#4b5563" text-anchor="middle">servos parked at 90°</text>
+<text x="860.0" y="756" font-size="16" fill="#4b5563" text-anchor="middle">buzzer off</text>
+<path d="M420,200 L698,200" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="559" y="188" font-size="16" fill="#1f2937" text-anchor="middle" font-weight="bold">≥ 2 online, map loaded</text>
+<path d="M270,250 L270,398" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="285" y="320" font-size="16" fill="#1f2937" text-anchor="start" font-weight="bold">≥ 2 online,</text>
+<text x="285" y="340" font-size="16" fill="#1f2937" text-anchor="start">no map</text>
+<path d="M270,500 L270,648" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="285" y="570" font-size="16" fill="#1f2937" text-anchor="start" font-weight="bold">Calibrate (C)</text>
+<text x="285" y="590" font-size="16" fill="#1f2937" text-anchor="start">area empty</text>
+<path d="M420,662 L735,267" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="600" y="455" font-size="16" fill="#1f2937" text-anchor="start" font-weight="bold">All bearings done</text>
+<text x="600" y="475" font-size="16" fill="#1f2937" text-anchor="start">map saved</text>
+<path d="M420,688 L698,688" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="559" y="678" font-size="15" fill="#1f2937" text-anchor="middle">Pause → cancelled, map cleared</text>
+<path d="M698,725 L422,725" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="559" y="715" font-size="15" fill="#1f2937" text-anchor="middle">Calibrate (C)</text>
+<path d="M420,758 L698,758" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="559" y="788" font-size="15" fill="#1f2937" text-anchor="middle">Map saved, game start (idle)</text>
+<path d="M1020,185 L1218,185" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1120" y="140" font-size="16" fill="#1f2937" text-anchor="middle" font-weight="bold">Reliable echo</text>
+<text x="1120" y="160" font-size="16" fill="#1f2937" text-anchor="middle">accepted</text>
+<path d="M1220,240 L1022,240" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1120" y="268" font-size="16" fill="#1f2937" text-anchor="middle" font-weight="bold">No fix 0.5 s</text>
+<text x="1120" y="288" font-size="16" fill="#1f2937" text-anchor="middle">→ search arcs</text>
+<path d="M1340,145 C1340,95 1420,95 1420,143" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1325" y="112" font-size="16" fill="#1f2937" text-anchor="end">New fix: fuse + re-aim</text>
+<path d="M835,265 L835,648" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="820" y="440" font-size="16" fill="#1f2937" text-anchor="end" font-weight="bold">Pause /</text>
+<text x="820" y="460" font-size="16" fill="#1f2937" text-anchor="end">Reset</text>
+<path d="M885,648 L885,267" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="900" y="440" font-size="16" fill="#1f2937" text-anchor="start" font-weight="bold">Search (Space)</text>
+<text x="900" y="460" font-size="16" fill="#1f2937" text-anchor="start">map present</text>
+<path d="M1300,265 L1300,700 L1022,700" fill="none" stroke="#374151" stroke-width="2.5" marker-end="url(#a)"/>
+<text x="1290" y="560" font-size="16" fill="#1f2937" text-anchor="end" font-weight="bold">Pause / Reset</text>
+<rect x="1330" y="330" width="240" height="205" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="1346" y="358" font-size="16" fill="#1f2937" font-weight="bold">Reliable echo =</text>
+<text x="1346" y="380" font-size="16" fill="#1f2937">status OK</text>
+<text x="1346" y="402" font-size="16" fill="#1f2937">≥ 10 cm, ≤ 1.7 m</text>
+<text x="1346" y="424" font-size="16" fill="#1f2937">not the wall map</text>
+<text x="1346" y="446" font-size="16" fill="#1f2937">same range again</text>
+<text x="1346" y="468" font-size="16" fill="#1f2937">within 1.5 s</text>
+<text x="1346" y="490" font-size="16" fill="#1f2937">(±16° bearing)</text>
+<text x="1346" y="512" font-size="16" fill="#1f2937">and not outvoted</text>
+<rect x="1330" y="600" width="240" height="150" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="1346" y="628" font-size="16" fill="#1f2937" font-weight="bold">Alerts (not states)</text>
+<text x="1346" y="650" font-size="16" fill="#1f2937">too close &lt; 10 cm</text>
+<text x="1346" y="672" font-size="16" fill="#1f2937">dead zone, outside field</text>
+<text x="1346" y="694" font-size="16" fill="#1f2937">two players → banner,</text>
+<text x="1346" y="716" font-size="16" fill="#1f2937">buzzer while near wall</text>
+<rect x="120" y="800" width="560" height="70" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="1.5" stroke-dasharray="6 4"/>
+<text x="136" y="828" font-size="16" fill="#1f2937" font-weight="bold">Any running state → Waiting for boxes</text>
+<text x="136" y="850" font-size="16" fill="#1f2937">when &lt; 2 boxes online: all pings cancelled</text>
+</svg>
