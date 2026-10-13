@@ -81,6 +81,17 @@ class ZoneGeometryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Geometry(zone_margin_m=2)
 
+    def test_node_x_numbers_the_boxes_by_firmware_id_instead_of_left_to_right(self):
+        # The three prototype boxes keep nodes 0, 1, 2; the fourth box is node 3 at 0.85 m.
+        g = Geometry(extra_sensor_x=(0.75, 0.85), node_x=(0.0, 0.75, 1.5, 0.85))
+        self.assertEqual([g.sensor_x(n) for n in range(4)], [0.0, 0.75, 1.5, 0.85])
+        self.assertEqual(g.sensor_position(3), (0.85, 0.2))
+        self.assertEqual([g.sweep_bounds(n) for n in range(4)],            # default arcs follow position
+                         [(10, 100), (30, 120), (80, 170), (30, 120)])
+        for bad in ((0.0, 0.75, 1.5), (0.0, 0.75, 1.5, 0.9), (0.0, 0.75, 1.5, 1.5), (0.0, 0.75, 1.5, True)):
+            with self.subTest(node_x=bad), self.assertRaises(ValueError):
+                Geometry(extra_sensor_x=(0.75, 0.85), node_x=bad)
+
     def test_zones_load_from_json_as_objects_or_lists(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "g.json"

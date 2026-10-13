@@ -11,6 +11,7 @@ firmware/arduino/tracker_left/
 firmware/arduino/tracker_right/
 firmware/arduino/tracker_middle/
 firmware/arduino/tracker_right_pair/
+firmware/arduino/tracker_fourth/
 # Leftovers of the removed TrackerNet and OneNet setups: nothing generates
 # them any more, but old copies on disk hold passwords, so they stay ignored.
 firmware/arduino/tracker_network.local.json

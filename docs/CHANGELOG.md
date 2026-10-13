@@ -10,8 +10,11 @@
 - `Snapshot.zones`: one snapshot per zone; top level = zone 0. `expect()`
   picks the zone by x. `--record` gains a `zones` column; headless JSON a
   `zones` list.
-- `config.pvp.json`: four boxes at 0, 0.75, 0.85, 1.5 m; the middle pair back
-  to back, arcs 90–170° and 10–90°; zones [0, 0.75] and [0.75, 1.5].
+- `config.pvp.json`: the three prototype boxes keep nodes 0, 1, 2; the fourth
+  box is node 3 at 0.85 m, back to back with the middle box, arcs 90–170° and
+  10–90°; zones [0, 0.75] and [0.75, 1.5]. `geometry.node_x` maps node IDs to
+  positions, so no box is reflashed to switch modes. Firmware env
+  `node_fourth` (NODE_ID 3) and the `tracker_fourth` sketch.
 - Window: one spot per player, dividing line, player labels; in simulation the
   mouse moves the player of the half it is in. The swarm tracker gained
   `set_simulated_position`, which the window called but it never had.

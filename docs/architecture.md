@@ -185,9 +185,12 @@ before.
 With no `zones` there is one zone of the whole field and every box: the
 single-player tracker, unchanged. `Snapshot.zones` carries one `Snapshot` per
 zone; the top-level fields are zone 0, the status names each player and the
-alert is the first zone's. `config.pvp.json` is the tracked four-box layout
-(boxes at 0, 0.75, 0.85 and 1.5 m, the middle pair back to back, each looking
-only into its own half); a layout has its own calibration file.
+alert is the first zone's. `config.pvp.json` is the tracked four-box layout:
+the three prototype boxes keep nodes 0, 1, 2 at 0, 0.75 and 1.5 m and the
+fourth box is node 3 at 0.85 m, back to back with the middle box, each of
+the pair looking only into its own half. `node_x` maps node IDs to positions
+when the boxes are not numbered left to right. A layout has its own
+calibration file.
 
 ## Rendering and logs
 

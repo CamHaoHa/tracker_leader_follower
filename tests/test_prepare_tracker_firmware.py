@@ -87,7 +87,7 @@ class PrepareTrackerFirmwareTests(unittest.TestCase):
                 self.assertNotIn("tracker_network", cpp)
                 self.assertLess(cpp.index('#include "tracker_config.h"'), cpp.index('#include "settings.h"'))
             self.assertEqual(sorted(path.name for path in output.iterdir()),
-                             ["tracker_left", "tracker_middle", "tracker_right", "tracker_right_pair"])
+                             ["tracker_fourth", "tracker_left", "tracker_middle", "tracker_right", "tracker_right_pair"])
 
     def test_cli_prepares_sketches_and_points_at_the_hotspot_settings(self):
         with tempfile.TemporaryDirectory() as tmp:

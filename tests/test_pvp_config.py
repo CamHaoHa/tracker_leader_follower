@@ -21,13 +21,15 @@ class PvpConfigTests(unittest.TestCase):
     def test_it_loads_as_two_halves_with_two_boxes_each(self):
         geometry = load_geometry(str(PVP))
         self.assertEqual(geometry.sensor_count, 4)
-        self.assertEqual([geometry.sensor_x(node) for node in range(4)], [0.0, 0.75, 0.85, 1.5])
+        # The three prototype boxes keep their node IDs; the fourth box is node 3 at 0.85 m.
+        self.assertEqual([geometry.sensor_x(node) for node in range(4)], [0.0, 0.75, 1.5, 0.85])
         self.assertEqual(geometry.zone_count, 2)
         self.assertEqual([geometry.zone_nodes(z) for z in range(2)], [(0, 1), (2, 3)])
         self.assertEqual([geometry.zone_bounds(z) for z in range(2)], [(0.0, 0.75), (0.75, 1.5)])
         # the middle pair sit back to back and look away from each other
         self.assertEqual(geometry.sweep_bounds(1), (90, 170))
-        self.assertEqual(geometry.sweep_bounds(2), (10, 90))
+        self.assertEqual(geometry.sweep_bounds(3), (10, 90))
+        self.assertEqual(geometry.sweep_bounds(2), (90, 150))
         self.assertEqual(geometry.buzzer_node, 1)
 
     def test_a_simulated_player_in_the_middle_of_each_half_is_tracked(self):

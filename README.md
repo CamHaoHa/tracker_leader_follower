@@ -227,12 +227,15 @@ A node probe moves a real servo; see the setup guide before using it.
 ## Player versus player: two halves, four boxes
 
 The field is split side by side into two zones, one player each, and each zone
-is tracked by its own pair of boxes. The tracked `config.pvp.json` places four
-boxes on the sensor line at `x = 0`, `0.75`, `0.85` and `1.50`: the middle pair
-sit back to back, box 1 looking only into the left half (arc 90–170°) and box 2
-only into the right half (10–90°). The fourth box is node 3 (`NODE_ID 3`,
-build it like the others). Players keep to their own half; holes should stay
-at least 0.25 m from the dividing line, so that a body never straddles it.
+is tracked by its own pair of boxes. The tracked `config.pvp.json` keeps the
+three prototype boxes where they are, nodes 0, 1 and 2 at `x = 0`, `0.75` and
+`1.50`, and adds a fourth box, node 3, at `x = 0.85`, back to back with the
+middle box: node 1 looks only into the left half (arc 90–170°), node 3 only
+into the right half (10–90°). `node_x` in the config says where each node
+stands, so nothing is reflashed to switch modes. Build the fourth box like the
+others with the `node_fourth` environment (`tracker_fourth` sketch). Players
+keep to their own half; holes should stay at least 0.25 m from the dividing
+line, so that a body never straddles it.
 
 ```bash
 python3 -m whack --tracker swarm --config config.pvp.json --calibration calibration.pvp.json

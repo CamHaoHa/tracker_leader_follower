@@ -75,8 +75,13 @@ class Geometry:
     max_network_delay_s: float = 0.12
     # --- N-box tracking (whack/swarm.py) ---
     # Extra sensor x positions on the sensor line, beyond left_x and right_x,
-    # e.g. (0.75,) for a centre box. Node IDs follow the sorted x order.
+    # e.g. (0.75,) for a centre box. Node IDs follow the sorted x order...
     extra_sensor_x: tuple = ()
+    # ...unless node_x says otherwise: the x of each node by NODE_ID, a
+    # permutation of (left_x, right_x, *extra_sensor_x). A fourth box added to
+    # the three-box field can then be node 3 wherever it stands, and the other
+    # boxes keep their firmware. Empty = numbered left to right.
+    node_x: tuple = ()
     # Per-node sweep bounds in degrees, (low, high), ordered like the sensors.
     # Empty tuple = defaults: outer boxes cover their side, middle boxes wide.
     sweep_bounds_deg: tuple = ()
@@ -138,6 +143,10 @@ class Geometry:
             raise ValueError("Extra sensors must lie strictly between left_x and right_x")
         if len(set(xs)) != len(xs):
             raise ValueError("Extra sensor positions must be distinct")
+        by_node = tuple(self.node_x)
+        if by_node and (any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in by_node)
+                        or sorted(by_node) != sorted((self.left_x, self.right_x, *xs))):
+            raise ValueError("node_x must list left_x, right_x and every extra sensor x once, by node ID")
         travel = tuple(self.servo_travel_deg)
         if len(travel) != 2 or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in travel) \
                 or not 0 <= travel[0] < travel[1] <= 180:
@@ -205,7 +214,9 @@ class Geometry:
         return None
 
     def sensor_x(self, node: int) -> float:
-        """x position of sensor `node`; nodes are numbered left to right."""
+        """x position of sensor `node`: numbered left to right, unless node_x says otherwise."""
+        if self.node_x:
+            return float(self.node_x[node])
         xs = sorted((self.left_x, self.right_x, *self.extra_sensor_x))
         return xs[node]
 
@@ -217,10 +228,10 @@ class Geometry:
         if self.sweep_bounds_deg:
             lo, hi = self.sweep_bounds_deg[node]
             return float(lo), float(hi)
-        n = self.sensor_count
-        if node == 0:
+        x = self.sensor_x(node)
+        if x == self.left_x:
             lo, hi = 10.0, 100.0
-        elif node == n - 1:
+        elif x == self.right_x:
             lo, hi = 80.0, 170.0
         else:
             lo, hi = 30.0, 120.0
@@ -362,7 +373,7 @@ def load_geometry(path: str | None) -> Geometry:
     if not path:
         return Geometry()
     data = json.loads(Path(path).read_text())
-    for key in ("extra_sensor_x", "sweep_bounds_deg", "servo_travel_deg"):
+    for key in ("extra_sensor_x", "sweep_bounds_deg", "servo_travel_deg", "node_x"):
         if key in data:
             data[key] = tuple(tuple(v) if isinstance(v, list) else v for v in data[key])
     if "zones" in data:

@@ -3,7 +3,7 @@
 Each ESP32 controls **one positional servo carrying one trigger/echo ultrasonic
 sensor**. Manually upload the build named after each box's position: `node_left`
 (node 0), `node_middle` (node 1) and `node_right` (node 2) for three boxes, or
-`node_left` and `node_right_pair` (node 1) for two. The laptop aims all motors concurrently, then
+`node_left` and `node_right_pair` (node 1) for two. Player versus player adds a fourth box, `node_fourth` (node 3), next to the middle box. The laptop aims all motors concurrently, then
 coordinates ultrasound transmissions in separate turns using **WM2 AIM/FIRE**.
 A board never ranges on its own. The desktop displays one tracked spot and has
 no gameplay logic.
@@ -98,6 +98,7 @@ cp include/config.example.h include/config.local.h
 pio run
 pio run -e node_left   -t upload --upload-port /dev/ttyUSB0   # node 0
 pio run -e node_middle -t upload --upload-port /dev/ttyUSB1   # node 1
+pio run -e node_fourth -t upload --upload-port /dev/ttyUSB1   # node 3, player versus player only
 pio run -e node_right  -t upload --upload-port /dev/ttyUSB2   # node 2
 # two boxes: node_left + node_right_pair (node 1)
 pio device monitor --port /dev/ttyUSB0 --baud 115200

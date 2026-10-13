@@ -16,8 +16,9 @@ FIRMWARE = ROOT / "firmware"
 DEFAULT_OUTPUT = FIRMWARE / "arduino"
 HEADERS = ("settings.h", "wm_protocol.h")
 # Node IDs follow box position left to right. With three boxes the right box is
-# node 2; a two-box layout uses right_pair (node 1) for its right box.
-NODES = (("left", 0), ("middle", 1), ("right", 2), ("right_pair", 1))
+# node 2; a two-box layout uses right_pair (node 1) for its right box. Player
+# versus player adds a fourth box, node 3, next to the middle box.
+NODES = (("left", 0), ("middle", 1), ("right", 2), ("right_pair", 1), ("fourth", 3))
 
 
 BUZZER_SETTINGS = '''
@@ -127,7 +128,7 @@ def prepare(output: Path = DEFAULT_OUTPUT, *, check: bool = False) -> list[Path]
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT,
-                        help="Parent directory for tracker_left, tracker_middle, tracker_right and tracker_right_pair")
+                        help="Parent directory for tracker_left, tracker_middle, tracker_right, tracker_right_pair and tracker_fourth")
     parser.add_argument("--check", action="store_true",
                         help="Check generated sources are current; do not write files")
     args = parser.parse_args(argv)

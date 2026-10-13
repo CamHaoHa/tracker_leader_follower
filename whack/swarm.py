@@ -243,7 +243,7 @@ class SwarmController:
     TOO_CLOSE_ALERT = "Player too close to box "     # followed by the node number
     PINGS_PER_CALIBRATION_BEARING = 3
     LAYOUT_FIELDS = ("width", "near_y", "far_y", "left_x", "right_x", "sensor_y", "extra_sensor_x",
-                     "sweep_bounds_deg", "sweep_step_deg")
+                     "node_x", "sweep_bounds_deg", "sweep_step_deg")
 
     def __init__(self, geometry=None, simulate=False, clock=time.monotonic, transport=None,
                  calibration_path="calibration.local.json", port=4210, node_ips=None,
