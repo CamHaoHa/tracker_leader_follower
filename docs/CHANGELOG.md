@@ -1,3 +1,22 @@
+## 2026-10-14 — player versus player: zones, four boxes
+
+- `geometry.zones` splits the field side by side, one player per zone, each
+  zone tracked by its own boxes only (own estimate, search, alerts and
+  expectation); pings stay one at a time across all boxes. No zones = the
+  single-player tracker as before, same code path, 149 tests unchanged.
+- A box ignores an echo that is the other zone's player: polar point inside
+  the other zone past `zone_margin_m` (0.15 m), or at the range of the player
+  the other zone tracks while he is inside this box's beam.
+- `Snapshot.zones`: one snapshot per zone; top level = zone 0. `expect()`
+  picks the zone by x. `--record` gains a `zones` column; headless JSON a
+  `zones` list.
+- `config.pvp.json`: four boxes at 0, 0.75, 0.85, 1.5 m; the middle pair back
+  to back, arcs 90–170° and 10–90°; zones [0, 0.75] and [0.75, 1.5].
+- Window: one spot per player, dividing line, player labels; in simulation the
+  mouse moves the player of the half it is in. The swarm tracker gained
+  `set_simulated_position`, which the window called but it never had.
+- Simulator: several players; the nearest in the beam answers (first echo).
+
 ## 2026-10-05 — a player who stands still stays tracked
 
 - Problem, seen on the boxes: a player standing still on a hole was lost 14

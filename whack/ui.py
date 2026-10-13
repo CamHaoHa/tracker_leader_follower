@@ -18,6 +18,9 @@ class TrackerWindow:
     BACKGROUND = "#000000"
     DOT = "#00E5FF"
     PREDICTED_DOT = "#007C89"
+    # One colour per zone (player versus player): player 1 keeps the single-player cyan.
+    DOTS = ("#00E5FF", "#FFB000")
+    PREDICTED_DOTS = ("#007C89", "#8A5E00")
     TEXT = "#D4D4D4"
     MUTED = "#8D8D8D"
     # Negative Tk sizes are pixels; large enough to read from the field.
@@ -42,7 +45,8 @@ class TrackerWindow:
         self._after_id = None
         self._diagnostics = False
         self._fullscreen = False
-        self._position = None
+        self._position = None           # zone 0: the single player
+        self._positions = []            # one per zone, None where there is no spot to draw
         self._frame_times = deque(maxlen=120)
 
         root.title("Dual ultrasonic tracker")
@@ -86,6 +90,8 @@ class TrackerWindow:
         if simulate:
             self.canvas.bind("<Motion>", self._mouse)
         footer = "Mouse simulation" if simulate else "Live sensors"
+        if simulate and self.geometry.zone_count > 1:
+            footer = "Mouse simulation (moves the player of the half it is in)"
         tk.Label(
             root, text=f"{footer}    Space: search    P: pause/resume    R: reset (stop and forget player)    "
                        f"{'' if simulate else 'C: calibrate    '}D: diagnostics    F11: fullscreen    Esc: close",
@@ -155,7 +161,11 @@ class TrackerWindow:
         # Mirrored like the display: canvas left is the player's left.
         x = (1 - event.x / width) * self.geometry.width
         y = self.geometry.near_y + event.y / height * (self.geometry.far_y - self.geometry.near_y)
-        self.controller.set_simulated_position(x, y)
+        if self.geometry.zone_count > 1:
+            # Player versus player: the mouse moves the player of the half it is in.
+            self.controller.set_simulated_position(x, y, self.geometry.zone_at(x) or 0)
+        else:
+            self.controller.set_simulated_position(x, y)
 
     def _screen(self, position) -> tuple[float, float]:
         # Convert metres to pixels independently on each axis. The field's near
@@ -178,30 +188,9 @@ class TrackerWindow:
         # estimate. It does not necessarily produce a fresh ultrasonic fix.
         self.snapshot = self.controller.poll()
         snapshot = self.snapshot
-        position = snapshot.position
-        valid = (
-            position is not None
-            and len(position) == 2
-            and all(math.isfinite(value) for value in position)
-            and snapshot.in_bounds
-            and not snapshot.dead_zone
-            and snapshot.state != "lost"
-        )
-        if valid:
-            x, y = position
-            # Match the tracker's millimetre quantization tolerance. Keep an
-            # accepted boundary point on the visible canvas edge.
-            valid = (
-                -0.002 <= x <= self.geometry.width + 0.002
-                and self.geometry.near_y - 0.002 <= y <= self.geometry.far_y + 0.002
-            )
-            if valid:
-                position = (
-                    min(max(x, 0.0), self.geometry.width),
-                    min(max(y, self.geometry.near_y), self.geometry.far_y),
-                )
         # Never retain a previous point when the current estimate is missing.
-        self._position = position if valid else None
+        self._positions = [self._spot(zone) for zone in self._zones(snapshot)]
+        self._position = self._positions[0]
         self.status_text.set(snapshot.status)
         self._update_pause_button()
         self._frame_times.append(time.monotonic())
@@ -210,6 +199,34 @@ class TrackerWindow:
         # The hardware updates more slowly; the diagnostics report both rates.
         self._after_id = self.root.after(16, self._tick)
 
+    @staticmethod
+    def _zones(snapshot):
+        """The per-zone snapshots; a snapshot without zones is its own only zone."""
+        zones = getattr(snapshot, "zones", None) if snapshot else None
+        return tuple(zones) if zones else (snapshot,)
+
+    def _spot(self, snapshot):
+        """The position to draw for one zone's snapshot, or None."""
+        position = snapshot.position if snapshot else None
+        valid = (
+            position is not None
+            and len(position) == 2
+            and all(math.isfinite(value) for value in position)
+            and snapshot.in_bounds
+            and not snapshot.dead_zone
+            and snapshot.state != "lost"
+        )
+        if not valid:
+            return None
+        x, y = position
+        # Match the tracker's millimetre quantization tolerance. Keep an
+        # accepted boundary point on the visible canvas edge.
+        if not (-0.002 <= x <= self.geometry.width + 0.002
+                and self.geometry.near_y - 0.002 <= y <= self.geometry.far_y + 0.002):
+            return None
+        return (min(max(x, 0.0), self.geometry.width),
+                min(max(y, self.geometry.near_y), self.geometry.far_y))
+
     def _draw(self) -> None:
         if not hasattr(self, "canvas"):
             return
@@ -217,14 +234,19 @@ class TrackerWindow:
         # Replace the previous frame rather than leaving a trail or a stale dot.
         canvas.delete("all")
         self._draw_grid(canvas)
-        if self._position is not None:
-            x, y = self._screen(self._position)
+        self._draw_zones(canvas)
+        for index, (zone, position) in enumerate(zip(self._zones(self.snapshot), self._positions)):
+            if position is None:
+                continue
+            x, y = self._screen(position)
             radius = 10
-            predicted = self.snapshot and self.snapshot.predicted
+            predicted = zone and zone.predicted
+            dot = self.DOTS[index % len(self.DOTS)]
+            dim = self.PREDICTED_DOTS[index % len(self.PREDICTED_DOTS)]
             # Swarm: hollow = one box only. Pairs: hollow = extrapolated estimate.
             canvas.create_oval(x - radius, y - radius, x + radius, y + radius,
-                               fill="" if predicted else self.DOT,
-                               outline=self.PREDICTED_DOT if predicted else "",
+                               fill="" if predicted else dot,
+                               outline=dim if predicted else "",
                                width=2, tags="position")
         snapshot = self.snapshot
         if getattr(self.controller, "paused", False) is True:
@@ -235,12 +257,15 @@ class TrackerWindow:
             canvas.create_text(canvas.winfo_width() / 2, canvas.winfo_height() * 0.18,
                                text=alert.upper(), fill=self.WARN, font=self.FONT_BANNER, tags="alert")
         if self._diagnostics:
-            position = "No current position" if self._position is None else (
-                f"x = {self._position[0]:.3f} m    y = {self._position[1]:.3f} m"
-            )
-            lines = [
-                position,
-                f"State: {snapshot.state.replace('_', ' ')}" if snapshot else "State: waiting",
+            zones = self._zones(snapshot)
+            lines = []
+            for index, (zone, position) in enumerate(zip(zones, self._positions)):
+                player = f"Player {index + 1}: " if len(zones) > 1 else ""
+                lines.append(f"{player}No current position" if position is None else
+                             f"{player}x = {position[0]:.3f} m    y = {position[1]:.3f} m")
+            lines += [
+                ("State: " + ", ".join(f"P{i + 1} {z.state.replace('_', ' ')}" for i, z in enumerate(zones))
+                 if len(zones) > 1 else f"State: {snapshot.state.replace('_', ' ')}") if snapshot else "State: waiting",
                 *([f"Box {i}: {status}" for i, status in enumerate(snapshot.node_status)] if snapshot
                   else ["Boxes: waiting"]),
                 f"Width: {self.geometry.width:g} m",
@@ -261,6 +286,26 @@ class TrackerWindow:
             canvas.create_text(14, 14,
                                text="\n".join(lines), anchor="nw", justify="left",
                                fill=self.MUTED, font=self.FONT_DIAGNOSTICS, tags="diagnostics")
+
+    def _draw_zones(self, canvas) -> None:
+        """Player versus player: the dividing lines and a player label per half.
+
+        Mirrored like the rest: zone 0 (field x from 0) is the right-hand half
+        as the players see the screen.
+        """
+        g = self.geometry
+        line = getattr(canvas, "create_line", None)
+        if g.zone_count < 2 or line is None:
+            return
+        h = canvas.winfo_height()
+        for zone in range(g.zone_count):
+            lo, hi = g.zone_bounds(zone)
+            if zone > 0:
+                px, _ = self._screen((lo, g.near_y))
+                line(px, 0, px, h, fill=self.FRAME, width=3, dash=(12, 8), tags="grid")
+            cx, _ = self._screen(((lo + hi) / 2, g.near_y))
+            canvas.create_text(cx, 28, text=f"Player {zone + 1}", anchor="n",
+                               fill=self.DOTS[zone % len(self.DOTS)], font=self.FONT_STATUS, tags="grid")
 
     def _draw_grid(self, canvas) -> None:
         """Field frame, 0.25 m grid, metre labels and a centre cross.

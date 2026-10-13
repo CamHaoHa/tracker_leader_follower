@@ -14,14 +14,29 @@ from .tracking import load_geometry
 
 CSV_FIELDS = (
     "elapsed_s", "x_m", "y_m", "fix_age_s", "in_bounds", "dead_zone",
-    "state", "predicted", "confidence", "update_hz", "status", "nodes", "aim_x", "aim_y", "reason", "alert", "contributors")
+    "state", "predicted", "confidence", "update_hz", "status", "nodes", "aim_x", "aim_y", "reason", "alert",
+    "contributors", "zones")
 
 
 def _finite_age(snapshot):
     return snapshot.fix_age_s if math.isfinite(snapshot.fix_age_s) else None
 
 
+def _zones(snapshot):
+    """Player versus player: one entry per zone; empty for a single player, whose
+    values are the ordinary columns."""
+    zones = getattr(snapshot, "zones", ()) or ()
+    if len(zones) < 2:
+        return []
+    return [{"x": None if z.position is None else round(z.position[0], 3),
+             "y": None if z.position is None else round(z.position[1], 3),
+             "state": z.state, "predicted": z.predicted, "contributors": getattr(z, "contributors", 0),
+             "fix_age_s": None if _finite_age(z) is None else round(_finite_age(z), 3),
+             "alert": getattr(z, "alert", "")} for z in zones]
+
+
 def _record_row(elapsed, snapshot, aim=(None, None), reason=""):
+    zones = _zones(snapshot)
     return (
         round(elapsed, 3), *(snapshot.position or ("", "")), _finite_age(snapshot),
         snapshot.in_bounds, snapshot.dead_zone, snapshot.state, snapshot.predicted,
@@ -29,6 +44,7 @@ def _record_row(elapsed, snapshot, aim=(None, None), reason=""):
         *("" if v is None else round(v, 3) for v in aim),  # where the servos were last aimed
         reason,  # tracker's last accept/reject reason, for post-run diagnosis
         getattr(snapshot, "alert", ""), getattr(snapshot, "contributors", ""),
+        json.dumps(zones, separators=(",", ":")) if zones else "",   # both players, PvP only
     )
 
 
@@ -99,7 +115,7 @@ def main(argv=None):
                 "tracked_polls": tracked, "position": snap.position, "status": snap.status,
                 "nodes": snap.node_status, "state": snap.state, "predicted": snap.predicted,
                 "confidence": snap.confidence, "fix_age_s": _finite_age(snap),
-                "update_hz": snap.update_hz,
+                "update_hz": snap.update_hz, "zones": _zones(snap),
             }, allow_nan=False))
             calibration_done = args.calibrate and bool(controller.background) and not controller.calibrating
             return 0 if tracked or calibration_done else 1

@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
-from whack.__main__ import main
+from whack.__main__ import _record_row, CSV_FIELDS, main
 from whack.tracking import Geometry
 from whack.ui import TrackerWindow
 
@@ -31,16 +31,18 @@ class Canvas:
     def __init__(self):
         self.ovals = []
         self.texts = []
+        self.lines = []
 
     def delete(self, tag):
         self.ovals.clear()
         self.texts.clear()
+        self.lines.clear()
 
     def winfo_width(self): return 900
     def winfo_height(self): return 600
     def create_oval(self, *args, **kwargs): self.ovals.append((args, kwargs))
     def create_text(self, *args, **kwargs): self.texts.append((args, kwargs))
-    def create_line(self, *args, **kwargs): pass
+    def create_line(self, *args, **kwargs): self.lines.append((args, kwargs))
     def create_rectangle(self, *args, **kwargs): pass
 
     @property
@@ -49,12 +51,12 @@ class Canvas:
 
 
 class DisplayTests(unittest.TestCase):
-    def window(self, *snapshots):
+    def window(self, *snapshots, geometry=None):
         window = TrackerWindow.__new__(TrackerWindow)
         window.root = Mock()
         window.controller = Mock()
         window.controller.poll.side_effect = snapshots
-        window.geometry = Geometry()
+        window.geometry = geometry or Geometry()
         window.canvas = Canvas()
         window.status_text = Mock()
         window.status_label = Mock()
@@ -63,6 +65,7 @@ class DisplayTests(unittest.TestCase):
         window._diagnostics = False
         window._frame_times = deque(maxlen=120)
         window._position = None
+        window._positions = []
         window.snapshot = None
         return window
 
@@ -207,6 +210,91 @@ class HeadlessTests(unittest.TestCase):
                 )
                 self.assertEqual(result, expected)
                 controller.start_calibration.assert_called_once()
+
+
+PVP = Geometry(extra_sensor_x=(0.75, 0.85), zones=((0, 0.75, (0, 1)), (0.75, 1.5, (2, 3))))
+
+
+def two_players(**changes):
+    """A swarm snapshot with two zones: player 1 solid, player 2 one box only."""
+    return snapshot(zones=(snapshot(position=(.35, 1.3)),
+                           snapshot(position=(1.15, 1.2), predicted=True)), **changes)
+
+
+class ZoneDisplayTests(DisplayTests):
+    """Player versus player: one spot per zone, the dividing line, the mouse per half."""
+
+    def test_two_zones_draw_two_spots_in_their_own_colours_and_the_dividing_line(self):
+        window = self.window(two_players(), geometry=PVP)
+        window._tick()
+        self.assertEqual(window._position, (.35, 1.3))            # zone 0 is still "the" position
+        self.assertEqual(window._positions, [(.35, 1.3), (1.15, 1.2)])
+        (first, first_kw), (second, second_kw) = window.canvas.ovals
+        self.assertEqual(first_kw["fill"], TrackerWindow.DOTS[0])
+        self.assertGreater(first[0], 450)                          # player 1's half is the right of the screen
+        self.assertEqual(second_kw["fill"], "")                    # one box: hollow, in player 2's colour
+        self.assertEqual(second_kw["outline"], TrackerWindow.PREDICTED_DOTS[1])
+        self.assertLess(second[0], 450)
+        divider = [args for args, kw in window.canvas.lines if kw.get("dash")]
+        self.assertEqual(divider, [(450, 0, 450, 600)])
+        labels = [t[1]["text"] for t in window.canvas.texts if t[1]["text"].startswith("Player")]
+        self.assertEqual(labels, ["Player 1", "Player 2"])
+
+    def test_a_missing_player_hides_only_that_spot(self):
+        window = self.window(snapshot(zones=(snapshot(position=None, state="find", in_bounds=False),
+                                             snapshot(position=(1.15, 1.2)))), geometry=PVP)
+        window._tick()
+        self.assertEqual(window._positions, [None, (1.15, 1.2)])
+        self.assertIsNone(window._position)
+        self.assertEqual(len(window.canvas.ovals), 1)
+        self.assertEqual(window.canvas.ovals[0][1]["fill"], TrackerWindow.DOTS[1])
+
+    def test_one_zone_draws_no_divider(self):
+        window = self.window(snapshot())
+        window._tick()
+        self.assertEqual([args for args, kw in window.canvas.lines if kw.get("dash")], [])
+        self.assertEqual(len(window.canvas.ovals), 1)
+
+    def test_diagnostics_list_both_players(self):
+        window = self.window(two_players(), geometry=PVP)
+        window._diagnostics = True
+        window._tick()
+        text = window.canvas.overlay_texts[0][1]["text"]
+        self.assertIn("Player 1: x = 0.350 m    y = 1.300 m", text)
+        self.assertIn("Player 2: x = 1.150 m    y = 1.200 m", text)
+        self.assertIn("State: P1 track, P2 track", text)
+
+    def test_the_mouse_moves_the_player_of_the_half_it_is_in(self):
+        window = self.window(two_players(), geometry=PVP)
+        window._mouse(SimpleNamespace(x=100, y=300))             # screen left = field x 1.33: player 2
+        (x, y, player), _ = window.controller.set_simulated_position.call_args
+        self.assertAlmostEqual(x, 1.3333, places=3)
+        self.assertAlmostEqual(y, 1.3)
+        self.assertEqual(player, 1)
+        window._mouse(SimpleNamespace(x=800, y=0))               # screen right = field x 0.17: player 1
+        self.assertEqual(window.controller.set_simulated_position.call_args[0][2], 0)
+        single = self.window(snapshot())
+        single._mouse(SimpleNamespace(x=100, y=300))
+        self.assertEqual(len(single.controller.set_simulated_position.call_args[0]), 2)
+
+
+class ZoneRecordTests(unittest.TestCase):
+    def test_the_csv_row_carries_both_players_only_for_two_zones(self):
+        row = _record_row(1.0, two_players())
+        self.assertEqual(len(row), len(CSV_FIELDS))
+        zones = json.loads(row[-1])
+        self.assertEqual([z["x"] for z in zones], [.35, 1.15])
+        self.assertEqual([z["contributors"] for z in zones], [0, 0])
+        self.assertEqual(zones[1]["predicted"], True)
+        self.assertEqual(_record_row(1.0, snapshot())[-1], "")
+
+    def test_headless_json_lists_the_zones(self):
+        result, report, controller, _ = HeadlessTests().run_cli(["--simulate"], [two_players()])
+        self.assertEqual(result, 0)
+        self.assertEqual([z["state"] for z in report["zones"]], ["track", "track"])
+        self.assertEqual(report["zones"][1]["y"], 1.2)
+        _, report, _, _ = HeadlessTests().run_cli(["--simulate"], [snapshot()])
+        self.assertEqual(report["zones"], [])
 
 
 if __name__ == "__main__":

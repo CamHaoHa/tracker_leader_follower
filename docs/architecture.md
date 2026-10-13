@@ -13,6 +13,7 @@ Gameplay and installer work are outside this stage.
 | `whack/protocol.py` | Strict, versioned ASCII packet formats |
 | `whack/transport.py` | Nonblocking UDP discovery and a timed point-reflector simulator |
 | `whack/controller.py` | Concurrent aiming, exclusive ping turns, calibration and tracking states |
+| `whack/swarm.py` | Independent-sweep, leader-follower tracker for N boxes; zones for player versus player |
 | `whack/tracking.py` | Circle intersection, motion filtering, timestamp alignment and bounded prediction |
 | `whack/ui.py` | One measured/predicted position spot and optional diagnostics |
 | `whack/__main__.py` | Window/headless launch, start mode and CSV recording |
@@ -163,9 +164,35 @@ node IDs suspend the conflicting node. Only one laptop should coordinate both
 units. Firmware releases control ownership after 30 seconds of inactivity, and
 Wi-Fi loss revokes pending transactions and firing permissions.
 
+## Player versus player: zones
+
+`geometry.zones` splits the field side by side into zones, each `(x_low,
+x_high, nodes)`; every box belongs to exactly one zone. A zone owns a player
+track: its own estimate, fresh contributions, loss search, alerts and game
+expectation (`expect()` picks the zone by the point's x, or by `zone=`). A box
+sweeps, aims, confirms and searches for its zone's player only, and the
+acoustic schedule stays one ping at a time across every box, so two players on
+four boxes are each measured about half as often as one player on three.
+
+A box drops an echo that is another zone's player when the polar point of the
+echo lies inside the other zone, past the box's own zone by more than
+`zone_margin_m`, or when the echo is at the range of the player the other
+zone is tracking while that player is inside the box's beam (a box aimed near
+the dividing line hears the neighbour at the edge of its cone and would
+otherwise plot him on the line). Readings that remain are fused per zone as
+before.
+
+With no `zones` there is one zone of the whole field and every box: the
+single-player tracker, unchanged. `Snapshot.zones` carries one `Snapshot` per
+zone; the top-level fields are zone 0, the status names each player and the
+alert is the first zone's. `config.pvp.json` is the tracked four-box layout
+(boxes at 0, 0.75, 0.85 and 1.5 m, the middle pair back to back, each looking
+only into its own half); a layout has its own calibration file.
+
 ## Rendering and logs
 
-The canvas contains one cyan position spot. Fresh measured estimates are solid;
+The canvas contains one position spot per zone, cyan for player 1 and amber
+for player 2, with the dividing line between halves. Fresh measured estimates are solid;
 short extrapolation is dim and hollow. Missing, lost or out-of-field positions
 are hidden. A 2 mm boundary tolerance accommodates millimetre range quantization;
 accepted near-edge points are clamped only for rendering onto the canvas edge.

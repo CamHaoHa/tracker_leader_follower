@@ -224,6 +224,35 @@ Use `--record tracking.csv` to log position, state, prediction flag, fix age,
 confidence and update rate. Only run one controller or hardware probe at a time.
 A node probe moves a real servo; see the setup guide before using it.
 
+## Player versus player: two halves, four boxes
+
+The field is split side by side into two zones, one player each, and each zone
+is tracked by its own pair of boxes. The tracked `config.pvp.json` places four
+boxes on the sensor line at `x = 0`, `0.75`, `0.85` and `1.50`: the middle pair
+sit back to back, box 1 looking only into the left half (arc 90–170°) and box 2
+only into the right half (10–90°). The fourth box is node 3 (`NODE_ID 3`,
+build it like the others). Players keep to their own half; holes should stay
+at least 0.25 m from the dividing line, so that a body never straddles it.
+
+```bash
+python3 -m whack --tracker swarm --config config.pvp.json --calibration calibration.pvp.json
+```
+
+The empty-field map belongs to a layout, so the four-box field needs its own
+calibration file; keep `calibration.local.json` for the single-player field.
+The window shows one spot per player (cyan on the right half as the players
+see it, amber on the left), the dividing line and the player names; **D** lists
+both positions. In `--simulate` the mouse moves the player of the half it is
+in. `--record` adds a `zones` column with both players' positions and states.
+
+The single-player game is untouched: a config without `zones` is one zone of
+the whole field with every box, and the fourth box may stay powered on then,
+since a box the config does not name is ignored. All four boxes still share
+the air, one ping at a time, so each player is measured about half as often
+as a single player on three boxes. A box ignores an echo that is the other
+half's player: its point lies in the other half, or it is at the range of the
+player the other pair is tracking while he is inside this box's beam.
+
 ## How the workflow works
 
 ```text
