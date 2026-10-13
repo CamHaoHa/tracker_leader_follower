@@ -51,12 +51,22 @@ Buzzer: while a near-wall alert is up (dead zone, or too close to a box) the
 box named by geometry.buzzer_node is sent WM2 BUZZ again and again, and one
 BUZZ 0 when that ends. BUZZ is not a ping and has no part in the acoustic
 schedule. The box silences itself if the laptop stops asking.
+
+Player versus player (geometry.zones). The field is split side by side into
+zones, one player each, and every box belongs to one zone: it sweeps, aims
+and confirms for that zone's player only, and an echo whose polar point lies
+inside another zone (past its own by more than zone_margin_m) is that zone's
+player and is ignored. Each zone has its own estimate, search, alerts and
+expectation; the acoustic schedule stays one ping at a time across all boxes.
+With no zones configured there is one zone, the whole field, every box: the
+single-player tracker exactly as before. Snapshot.zones carries one Snapshot
+per zone; the top-level fields describe zone 0.
 """
 
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 import itertools
 import json
 import math
@@ -150,6 +160,29 @@ class Estimate:
         return True
 
 
+@dataclass
+class Zone:
+    """One player's part of the field, the boxes that track there, and the track.
+
+    Single player: one zone, the whole field, every box. Player versus player:
+    the field split side by side, each zone tracked by its own boxes only.
+    """
+    index: int
+    x_low: float
+    x_high: float
+    nodes: tuple
+    estimate: Estimate
+    contributions: dict = field(default_factory=dict)
+    good_times: deque = field(default_factory=lambda: deque(maxlen=12))
+    state: str = "find"
+    reason: str = "Waiting for measurements"
+    alert: str = ""
+    alert_until: float = 0.0
+    inconsistent: deque = field(default_factory=lambda: deque(maxlen=32))  # times two boxes disagreed
+    outside_since: float | None = None
+    expected: tuple | None = None       # where the game expects this player, see expect()
+
+
 def fuse(geometry, contributions):
     """Least-squares point from several range circles (Gauss-Newton).
 
@@ -227,22 +260,16 @@ class SwarmController:
         self.confirm_mdeg = max(self.step_mdeg, round(2*self.geometry.jitter_deg*1000))
         # A whole number of sweep steps: the search stays on the calibrated grid.
         self.search_mdeg = max(1, round(self.geometry.search_step_deg/self.geometry.sweep_step_deg))*self.step_mdeg
-        self.expected = None                    # where the game expects the player, see expect()
-        self.estimate = Estimate(self.geometry)
-        self.contributions: dict[int, Contribution] = {}
-        self.good_times = deque(maxlen=12)
+        g = self.geometry
+        self.zones = [Zone(z, *g.zone_bounds(z), g.zone_nodes(z), Estimate(g)) for z in range(g.zone_count)]
+        if simulate and transport is None and len(self.zones) > 1:
+            # One simulated player per zone, each in the middle of its zone.
+            self.transport.players = [((z.x_low + z.x_high)/2, (g.near_y + g.far_y)/2) for z in self.zones]
         self.acoustic_safe_at = 0.0
         self.firing: int | None = None          # node with a ping in the air
-        self.state = "find"
-        self.reason = "Waiting for measurements"
-        self.alert = ""
-        self.alert_until = 0.0
-        self.alert_since = {}
         self.buzzing = False                   # a BUZZ > 0 was sent and not yet followed by BUZZ 0
         self.buzz_sent_at = float("-inf")      # last attempt to request sound, sent or not
         self.buzz_address = None               # where the sound was last requested
-        self.inconsistent = deque(maxlen=32)   # times two boxes disagreed about where the player is
-        self.outside_since = None
         self.too_close_since = {}              # node -> when it began reporting a player too close
         self.too_close_seen = {}               # node -> its latest such report
         self.paused = self.idle_after_calibration = bool(start_paused)
@@ -257,6 +284,34 @@ class SwarmController:
         self._load_calibration()
         for box in self.boxes:
             box.bearing = 90000
+
+    # ----- zones ----------------------------------------------------------
+    def _zone(self, node):
+        """The zone a box tracks for."""
+        return self.zones[self.geometry.zone_of(node)]
+
+    def _zone_boxes(self, zone):
+        return [self.boxes[n] for n in zone.nodes]
+
+    # The single-player view, zone 0: what the game and the tools read today.
+    @property
+    def estimate(self): return self.zones[0].estimate
+    @property
+    def contributions(self): return self.zones[0].contributions
+    @property
+    def good_times(self): return self.zones[0].good_times
+    @property
+    def inconsistent(self): return self.zones[0].inconsistent
+    @property
+    def state(self): return self.zones[0].state
+    @property
+    def reason(self): return self.zones[0].reason
+    @property
+    def alert(self): return self.zones[0].alert
+    @property
+    def expected(self): return self.zones[0].expected
+    @property
+    def outside_since(self): return self.zones[0].outside_since
 
     # ----- persistence --------------------------------------------------
     def _grid(self, node):
@@ -296,14 +351,17 @@ class SwarmController:
         self._cancel_all()
         self._silence_buzzer()
         self.paused = False
-        self.calibrating, self.state = True, "calibration"
+        self.calibrating = True
+        for zone in self.zones:
+            zone.state = "calibration"
         self.background = {}
         self.calibration_samples = {}
         self.calibration_message = ""
         self.calibration_plan = {n: [b for b in self._grid(n) for _ in range(self.PINGS_PER_CALIBRATION_BEARING)]
                                  for n in range(self.count)}
         self.calibration_total = sum(len(v) for v in self.calibration_plan.values())
-        self.estimate.reset(); self.contributions.clear()
+        for zone in self.zones:
+            zone.estimate.reset(); zone.contributions.clear()
         for box in self.boxes:
             box.mode = "sweep"
 
@@ -324,7 +382,8 @@ class SwarmController:
             self.calibrating = False
             self.background = {}
             self.calibration_message = "Calibration cancelled; retry with the area empty"
-            self.state = "find"
+            for zone in self.zones:
+                zone.state = "find"
         self.park_servos()
 
     def resume(self):
@@ -335,9 +394,11 @@ class SwarmController:
         self._clear_player()
         self.park_servos()
 
-    def expect(self, point):
+    def expect(self, point, zone=None):
         """Tell the tracker where the game expects the player next, e.g. the
         column the mole moved to. None, or a point outside the field, withdraws it.
+        With several zones the point's x names the player; `zone` names one
+        outright, which withdrawing one player's expectation alone needs.
 
         It only decides where each box looks first after a full loss. It is
         never a position: a fix still needs a reliable echo.
@@ -345,7 +406,21 @@ class SwarmController:
         g = self.geometry
         if point is not None and not (0 <= point[0] <= g.width and g.near_y <= point[1] <= g.far_y):
             point = None
-        self.expected = point
+        if zone is None and point is not None:
+            zone = g.zone_at(point[0])
+            if zone is None:
+                return
+        for z in self.zones if zone is None else (self.zones[zone],):
+            z.expected = point
+
+    def set_simulated_position(self, x, y, player=0):
+        """Move a simulated player (its zone's index); hardware ignores this input."""
+        if not (self.simulate and math.isfinite(x) and math.isfinite(y)):
+            return
+        if len(self.zones) == 1 and getattr(self.transport, "players", None) is None:
+            self.transport.target = (x, y)
+        else:
+            self.transport.set_player(player, (x, y))
 
     def park_servos(self):
         for n in range(self.count):
@@ -368,10 +443,11 @@ class SwarmController:
     def _clear_player(self):
         self._cancel_all()
         self._silence_buzzer()
-        self.estimate.reset(); self.contributions.clear(); self.good_times.clear()
-        self.state, self.reason, self.alert = "find", "Waiting for measurements", ""
-        self.alert_since.clear(); self.outside_since = None; self._forget_too_close()
-        self.expected = None
+        for zone in self.zones:
+            zone.estimate.reset(); zone.contributions.clear(); zone.good_times.clear()
+            zone.state, zone.reason, zone.alert = "find", "Waiting for measurements", ""
+            zone.outside_since = None; zone.expected = None
+        self._forget_too_close()
         for box in self.boxes:
             box.mode, box.hold_bearing, box.last_reading = "sweep", None, None
             box.search = False
@@ -394,20 +470,20 @@ class SwarmController:
         lo, hi = self.geometry.sweep_bounds(node)
         return round(lo*1000), round(hi*1000)
 
-    def _start_search(self):
-        """Nobody sees the player any more: every box stops dithering round the
-        old spot and searches its arc, starting across the middle of the field.
+    def _start_search(self, zone):
+        """Nobody sees this zone's player any more: its boxes stop dithering round
+        the old spot and search their arcs, starting across the middle of the zone.
         An arc may reach past the field (0..180 on an outer box): the side with
         more field in it comes first."""
         g = self.geometry
-        middle = (g.width/2, (g.near_y + g.far_y)/2)
-        for box in self.boxes:
+        middle = ((zone.x_low + zone.x_high)/2, (g.near_y + g.far_y)/2)
+        for box in self._zone_boxes(zone):
             box.mode, box.hold_bearing = "sweep", None
             box.aim_cooldown_until = float("-inf")
             box.search, box.search_bounces = True, 0
             start = box.bearing
-            if self.expected is not None:           # look where the game expects the player first
-                start = box.hold_bearing = self._clamp_travel(box.node, g.angle(box.node, self.expected))
+            if zone.expected is not None:           # look where the game expects the player first
+                start = box.hold_bearing = self._clamp_travel(box.node, g.angle(box.node, zone.expected))
             box.step = -self.step_mdeg if start > g.angle(box.node, middle) else self.step_mdeg
 
     def _next_search_bearing(self, box):
@@ -467,8 +543,9 @@ class SwarmController:
         if box.hold_bearing is not None:            # repeat once to confirm a candidate
             b, box.hold_bearing = box.hold_bearing, None
             return b
-        estimate = self.estimate.point
-        fresh = now - self.estimate.last_good <= g.local_search_s
+        zone = self._zone(box.node)
+        estimate = zone.estimate.point
+        fresh = now - zone.estimate.last_good <= g.local_search_s
         if box.mode == "aimed" and estimate is not None and fresh:
             box.aimed_bearing = self._clamp_travel(box.node, g.angle(box.node, estimate))
             return box.aimed_bearing
@@ -501,8 +578,35 @@ class SwarmController:
                 return True
         return False
 
+    def _other_zone(self, node, bearing, d, now):
+        """Whether an echo is another zone's player.
+
+        It is when its polar point lies inside another zone, past this box's
+        own zone by more than zone_margin_m. A box aimed near the dividing
+        line hears the neighbour at the edge of its beam and plots him close
+        to the line, inside that margin; but his own boxes know where he is,
+        so an echo at his range while he is inside this box's beam is him too.
+        """
+        if len(self.zones) < 2:
+            return False
+        g = self.geometry
+        zone = self._zone(node)
+        (x, _), r = self._polar(node, bearing, d)
+        others = [other for other in self.zones if other is not zone]
+        if not zone.x_low - g.zone_margin_m <= x <= zone.x_high + g.zone_margin_m \
+                and any(other.x_low <= x <= other.x_high for other in others):
+            return True
+        for other in others:
+            him = other.estimate.point
+            if him is None or now - other.estimate.last_good > g.local_search_s:
+                continue
+            if abs(g.angle(node, him) - bearing) <= g.beam_half_angle_deg*1000 \
+                    and abs(math.dist(g.sensor_position(node), him) - r) <= self.RESIDUAL_M:
+                return True
+        return False
+
     def _classify(self, box, message, now):
-        """Return ('reliable', d) | ('candidate', d) | ('hint', d) | ('close', d) | ('none', None)."""
+        """Return ('reliable', d) | ('candidate', d) | ('hint', d) | ('close', d) | ('other', d) | ('none', None)."""
         g = self.geometry
         # A ping without an echo, or with an echo of the room or from beyond
         # the reliable range, says nothing about where the player is: the last
@@ -518,6 +622,9 @@ class SwarmController:
         if self.background and not self.simulate and self._is_background(box.node, message.angle_mdeg, d):
             box.rejections["background"] = box.rejections.get("background", 0) + 1
             return "none", d
+        if self._other_zone(box.node, message.angle_mdeg, d, now):
+            box.rejections["other zone"] = box.rejections.get("other zone", 0) + 1
+            return "other", d
         if d > g.reliable_range_m:
             return "hint", d
         last = box.last_reading
@@ -555,6 +662,8 @@ class SwarmController:
             return
         if kind == "hint":
             box.status += " (far)"
+        elif kind == "other":
+            box.status += " (other zone)"
         if kind != "reliable":
             self._on_miss(box, txn_mode, now)
             return
@@ -587,9 +696,10 @@ class SwarmController:
         return point
 
     def _absorb(self, contribution, now):
-        """Fuse a reliable reading with the other fresh ones; False when the others outvote it."""
+        """Fuse a reliable reading with the other fresh ones of its zone; False when the others outvote it."""
         g = self.geometry
-        fresh = {n: c for n, c in self.contributions.items() if now - c.time <= self.FUSE_WINDOW_S}
+        zone = self._zone(contribution.node)
+        fresh = {n: c for n, c in zone.contributions.items() if now - c.time <= self.FUSE_WINDOW_S}
         fresh[contribution.node] = contribution
         point = self._agreement(list(fresh.values()))
         if point is None:
@@ -598,7 +708,7 @@ class SwarmController:
             others = [c for c in fresh.values() if c.node != contribution.node]
             spread = max(math.dist(contribution.point, c.point) for c in others)
             if spread >= g.two_player_separation_m:
-                self.inconsistent.append(now)
+                zone.inconsistent.append(now)
             fresh = {contribution.node: contribution}
             point = contribution.point
             for size in range(len(others), 0, -1):
@@ -616,22 +726,23 @@ class SwarmController:
             if len(fresh) == 1 and len(holding) >= 2 and self._agreement(holding) is not None:
                 box = self.boxes[contribution.node]
                 box.rejections["outvoted"] = box.rejections.get("outvoted", 0) + 1
-                self.contributions = {c.node: c for c in others}
+                zone.contributions = {c.node: c for c in others}
                 return False
         self._accept(contribution, fresh, point, now)
         return True
 
     def _accept(self, contribution, fresh, point, now):
-        """Take `point`, fused from `fresh`, as the player's position and aim the boxes at it."""
+        """Take `point`, fused from `fresh`, as its zone's player position and aim that zone's boxes at it."""
         g = self.geometry
-        self.contributions = fresh
-        if not self.estimate.update(point, contribution.time, len(fresh)):
-            self.reason = "Position jumped"
+        zone = self._zone(contribution.node)
+        zone.contributions = fresh
+        if not zone.estimate.update(point, contribution.time, len(fresh)):
+            zone.reason = "Position jumped"
             return
-        self.good_times.append(contribution.time)
-        self.reason = "Tracking" if len(fresh) >= 2 else "Tracking (one box)"
-        self.state = "track"
-        for box in self.boxes:
+        zone.good_times.append(contribution.time)
+        zone.reason = "Tracking" if len(fresh) >= 2 else "Tracking (one box)"
+        zone.state = "track"
+        for box in self._zone_boxes(zone):
             moved = box.aimed_point is None or math.dist(box.aimed_point, point) >= self.REAIM_MOVE_M
             if box.node == contribution.node or box.mode == "aimed":
                 box.mode = "aimed"
@@ -703,7 +814,8 @@ class SwarmController:
         try:
             messages = self.transport.receive()
         except OSError as exc:
-            self.reason = f"Network receive failed: {exc}"
+            for zone in self.zones:
+                zone.reason = f"Network receive failed: {exc}"
             return
         for message, address in messages:
             if not isinstance(message, (Range, Ready)) or not 0 <= message.node < self.count:
@@ -795,12 +907,13 @@ class SwarmController:
                     txn.done = True; box.txn = None
         if len(online) < 2:
             self._cancel_all()
-        # loss handling
-        if self.state == "track" and now - self.estimate.last_good > g.local_search_s:
-            self.state = "find"
-            self.reason = "Player lost — sweeping"
-            self.contributions.clear()
-            self._start_search()
+        # loss handling, per zone
+        for zone in self.zones:
+            if zone.state == "track" and now - zone.estimate.last_good > g.local_search_s:
+                zone.state = "find"
+                zone.reason = "Player lost — sweeping"
+                zone.contributions.clear()
+                self._start_search(zone)
         if ready_to_run:
             # aim every idle box
             for box in self.boxes:
@@ -837,13 +950,14 @@ class SwarmController:
         self._update_buzzer(now)
         return self._snapshot(now, online, ready_to_run)
 
-    def _raise(self, text, now):
-        self.alert, self.alert_until = text, now + self.ALERT_LATCH_S
+    def _raise(self, zone, text, now):
+        zone.alert, zone.alert_until = text, now + self.ALERT_LATCH_S
 
     # ----- buzzer ---------------------------------------------------------
     def _near_wall_alert(self):
-        """Only the alerts that mean 'step back from the wall' sound the buzzer."""
-        return self.alert == self.DEAD_ZONE_ALERT or self.alert.startswith(self.TOO_CLOSE_ALERT)
+        """Only the alerts that mean 'step back from the wall' sound the buzzer, from any zone."""
+        return any(zone.alert == self.DEAD_ZONE_ALERT or zone.alert.startswith(self.TOO_CLOSE_ALERT)
+                   for zone in self.zones)
 
     def _send_buzz(self, duration_ms, address):
         try:
@@ -897,17 +1011,22 @@ class SwarmController:
         for node in [n for n, seen in self.too_close_seen.items()
                      if n not in online or now - seen > self.TOO_CLOSE_STALE_S]:
             self._forget_too_close(node)
-        close = [n for n, t in self.too_close_since.items() if now - t >= self.TOO_CLOSE_S]
+        for zone in self.zones:
+            self._update_zone_alerts(zone, now)
+
+    def _update_zone_alerts(self, zone, now):
+        g = self.geometry
+        close = [n for n, t in self.too_close_since.items() if n in zone.nodes and now - t >= self.TOO_CLOSE_S]
         if close:
-            self._raise(f"{self.TOO_CLOSE_ALERT}{close[0]}", now)
+            self._raise(zone, f"{self.TOO_CLOSE_ALERT}{close[0]}", now)
             return
-        recent = [t for t in self.inconsistent if now - t <= 3.0]
+        recent = [t for t in zone.inconsistent if now - t <= 3.0]
         if len(recent) >= 2 and recent[-1] - recent[0] >= self.TWO_PLAYER_S:
-            self._raise("Two players detected", now)
+            self._raise(zone, "Two players detected", now)
             return
-        point = self.estimate.point
-        fresh_contrib = [c for c in self.contributions.values() if now - c.time <= self.FUSE_WINDOW_S]
-        fresh = fresh_contrib and now - self.estimate.last_good <= g.local_search_s
+        point = zone.estimate.point
+        fresh_contrib = [c for c in zone.contributions.values() if now - c.time <= self.FUSE_WINDOW_S]
+        fresh = fresh_contrib and now - zone.estimate.last_good <= g.local_search_s
         if point is not None and fresh:
             # A single box only knows the bearing to within its cone, so its fix
             # can poke past an edge while the player is inside. Demand a clear
@@ -916,42 +1035,55 @@ class SwarmController:
             dead_zone = point[1] < g.near_y - (0 if len(fresh_contrib) >= 2 else .05)
             outside = dead_zone or not (-margin <= point[0] <= g.width + margin and point[1] <= g.far_y + margin)
             if outside:
-                self.outside_since = self.outside_since or now
-                if now - self.outside_since >= self.OUTSIDE_S:
-                    self._raise(self.DEAD_ZONE_ALERT if dead_zone else "Player outside the field", now)
+                zone.outside_since = zone.outside_since or now
+                if now - zone.outside_since >= self.OUTSIDE_S:
+                    self._raise(zone, self.DEAD_ZONE_ALERT if dead_zone else "Player outside the field", now)
                     return
             else:
-                self.outside_since = None
-        if self.alert and now >= self.alert_until:
-            self.alert = ""
+                zone.outside_since = None
+        if zone.alert and now >= zone.alert_until:
+            zone.alert = ""
 
     def _snapshot(self, now, online, ready_to_run):
-        g = self.geometry
-        fresh_contrib = sum(1 for c in self.contributions.values() if now - c.time <= self.FUSE_WINDOW_S)
-        position = self.estimate.point if self.state == "track" else None
-        age = max(0.0, now - self.estimate.last_good)
-        predicted = position is not None and fresh_contrib < 2   # hollow spot: one box only
         if self.calibrating:
             done, total = self.calibration_progress()
-            status = f"Keep area empty — calibrating {done}/{total}"
+            common = f"Keep area empty — calibrating {done}/{total}"
         elif self.paused:
-            status = self.calibration_message if self.calibration_message.startswith("Calibration saved") \
+            common = self.calibration_message if self.calibration_message.startswith("Calibration saved") \
                 else "Paused — Search (Space) to track, Calibrate (C) for a new map"
         elif not (self.simulate or self.background):
-            status = self.calibration_message or "Clear the area, then select Calibrate empty area"
+            common = self.calibration_message or "Clear the area, then select Calibrate empty area"
         elif len(online) < 2:
-            status = f"Waiting for sensors: {len(online)} of {self.count} online"
-        elif self.state == "track":
+            common = f"Waiting for sensors: {len(online)} of {self.count} online"
+        else:
+            common = None
+        zones = tuple(self._zone_snapshot(zone, now, common) for zone in self.zones)
+        # The top level is zone 0, the single player; with several zones the
+        # status names each player and the alert is the first zone's that has one.
+        status = zones[0].status if len(zones) == 1 or common is not None else \
+            " | ".join(f"P{zone.index + 1}: {snap.status}" for zone, snap in zip(self.zones, zones))
+        alert = next((snap.alert for snap in zones if snap.alert), "")
+        return replace(zones[0], status=status, node_status=tuple(self.node_status), alert=alert, zones=zones)
+
+    def _zone_snapshot(self, zone, now, common):
+        g = self.geometry
+        fresh_contrib = sum(1 for c in zone.contributions.values() if now - c.time <= self.FUSE_WINDOW_S)
+        position = zone.estimate.point if zone.state == "track" else None
+        age = max(0.0, now - zone.estimate.last_good)
+        predicted = position is not None and fresh_contrib < 2   # hollow spot: one box only
+        if common is not None:
+            status = common
+        elif zone.state == "track":
             status = "Tracking player" if fresh_contrib >= 2 else "Tracking player (one box)"
         else:
-            modes = ", ".join(f"{b.node}:{'search' if b.search else b.mode}" for b in self.boxes)
+            modes = ", ".join(f"{b.node}:{'search' if b.search else b.mode}" for b in self._zone_boxes(zone))
             status = f"Searching — {modes}"
-        if self.alert:
-            status = f"PAUSE: {self.alert}"
-        rate = ((len(self.good_times)-1)/(self.good_times[-1]-self.good_times[0])
-                if len(self.good_times) > 1 and age <= g.local_search_s else 0.0)
+        if zone.alert:
+            status = f"PAUSE: {zone.alert}"
+        good = zone.good_times
+        rate = (len(good)-1)/(good[-1]-good[0]) if len(good) > 1 and age <= g.local_search_s else 0.0
         in_bounds = position is not None and 0 <= position[0] <= g.width and g.near_y <= position[1] <= g.far_y
         dead_zone = position is not None and 0 <= position[0] <= g.width and position[1] < g.near_y
-        confidence = self.estimate.confidence*max(0.0, 1-age/g.local_search_s) if position else 0.0
-        return Snapshot(position, status, tuple(self.node_status), dead_zone, in_bounds, self.state,
-                        predicted, confidence, age, rate, self.alert, fresh_contrib)
+        confidence = zone.estimate.confidence*max(0.0, 1-age/g.local_search_s) if position else 0.0
+        return Snapshot(position, status, tuple(self.node_status[n] for n in zone.nodes), dead_zone, in_bounds,
+                        zone.state, predicted, confidence, age, rate, zone.alert, fresh_contrib)

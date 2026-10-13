@@ -52,6 +52,9 @@ class Snapshot:
     update_hz: float = 0.0
     alert: str = ""            # game-facing pause condition, empty when none
     contributors: int = 0      # boxes whose fresh ranges built the position
+    # Player versus player: one Snapshot per zone (same fields, no zones of its
+    # own). The fields above then describe zone 0; empty for the paired tracker.
+    zones: tuple = ()
 
 
 @dataclass

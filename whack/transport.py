@@ -123,16 +123,19 @@ class _Echo:
 
 
 class SimulatedTransport:
-    """Timed single reflector with independent servos and explicit ping grants.
+    """Timed reflectors with independent servos and explicit ping grants.
 
     ``target`` can be a point, None, or a callable receiving simulation time.
-    The echo captures that target at FIRE, never at later response delivery.
+    ``players``, when set, is a list of points (or None) that replaces it: the
+    echo is the nearest player disc inside the beam, as for a real first echo.
+    The echo captures the target at FIRE, never at later response delivery.
     This models ideal geometry and scheduling, not reflections from a body.
     """
 
     def __init__(self, clock, geometry):
         self.clock, self.geometry = clock, geometry
         self.target = (geometry.width / 2, (geometry.near_y + geometry.far_y) / 2)
+        self.players = None
         n = geometry.sensor_count
         self.count = n
         self.angles = [90000] * n
@@ -160,6 +163,23 @@ class SimulatedTransport:
     def buzzing(self, node):
         """Whether a box with a buzzer would be sounding now (deadline not passed)."""
         return self.clock() < self.buzz_until[node]
+
+    def set_player(self, player, point):
+        """Place one of several simulated players; the others keep their places."""
+        if self.players is None:
+            self.players = []
+        self.players.extend([None] * (player + 1 - len(self.players)))
+        self.players[player] = point
+
+    def _targets(self, now, node):
+        if self.players is not None:
+            return list(self.players)
+        if callable(self.target):
+            try:
+                return [self.target(now, node)]      # per-box view, e.g. two reflectors
+            except TypeError:
+                return [self.target(now)]
+        return [self.target]
 
     def _reply(self, node, message):
         self.messages.append((message, self.address(node)))
@@ -282,21 +302,16 @@ class SimulatedTransport:
         request.fired = True
         self.last_ping[node] = now
         self.ping_times.append((now, node, seq))
-        if callable(self.target):
-            try:
-                target = self.target(now, node)      # per-box view, e.g. two reflectors
-            except TypeError:
-                target = self.target(now)
-        else:
-            target = self.target
         distance, status = 0, "TIMEOUT"
-        if target is not None:
+        for target in self._targets(now, node):
+            if target is None:
+                continue
             x = self.geometry.sensor_x(node)
             visible = abs(self.geometry.angle(node, target) - request.angle) <= self.geometry.beam_half_angle_deg * 1000
             # The simulated player is a disc: the echo comes from its near surface.
             raw = round((math.dist((x, self.geometry.sensor_y), target) - self.geometry.body_radius_m) * 1000)
-            if visible and 20 <= raw <= 4000:
-                distance, status = raw, "OK"
+            if visible and 20 <= raw <= 4000 and (status != "OK" or raw < distance):
+                distance, status = raw, "OK"        # the first echo: the nearest body in the beam
         flight = distance * 2 / 343000 if status == "OK" else 0.025
         self.pending.append(_Echo(node, seq, request.angle, now, now + flight, distance, status))
 

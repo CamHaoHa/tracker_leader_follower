@@ -103,6 +103,15 @@ class Geometry:
     # Node that carries the near-wall warning buzzer; -1 = no buzzer. Not a
     # layout value: changing it never invalidates a saved calibration.
     buzzer_node: int = -1
+    # --- player-versus-player (whack/swarm.py) ---
+    # Zones split the field side by side, one player per zone, each tracked by
+    # its own boxes: ((x_low, x_high, (node, ...)), ...). Every node belongs to
+    # exactly one zone. Empty = one zone, the whole field, every box: the
+    # single-player game. In JSON: [{"x": [0, 0.75], "nodes": [0, 1]}, ...].
+    zones: tuple = ()
+    # A box's echo whose polar point lies this far inside ANOTHER zone is that
+    # zone's player, not this box's, and is ignored by this box.
+    zone_margin_m: float = 0.15
 
     def __post_init__(self):
         if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
@@ -145,10 +154,55 @@ class Geometry:
             raise ValueError("Invalid sweep, range or jitter limits")
         if type(self.buzzer_node) is not int or not -1 <= self.buzzer_node < self.sensor_count:
             raise ValueError("buzzer_node must be -1 (no buzzer) or the index of a sensor node")
+        if not 0 <= self.zone_margin_m <= 1:
+            raise ValueError("zone_margin_m must be within 0..1 m")
+        zones = tuple(self.zones)
+        if zones:
+            nodes = []
+            for zone in zones:
+                if len(zone) != 3 or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in zone[:2]) \
+                        or not 0 <= zone[0] < zone[1] <= self.width:
+                    raise ValueError("Each zone needs x_low < x_high inside the field and its nodes")
+                members = tuple(zone[2])
+                if not members or any(type(n) is not int or not 0 <= n < self.sensor_count for n in members):
+                    raise ValueError("Each zone needs at least one node index")
+                nodes.extend(members)
+            if sorted(nodes) != list(range(self.sensor_count)):
+                raise ValueError("Every node must belong to exactly one zone")
+            if any(a[1] > b[0] for a, b in zip(zones, zones[1:])):
+                raise ValueError("Zones must be ordered along x and must not overlap")
 
     @property
     def sensor_count(self) -> int:
         return 2 + len(self.extra_sensor_x)
+
+    # ----- zones (player versus player) -----
+    @property
+    def zone_count(self) -> int:
+        return len(self.zones) or 1
+
+    def zone_bounds(self, zone: int) -> tuple[float, float]:
+        """The x range of one zone; the whole field when no zones are configured."""
+        if not self.zones:
+            return 0.0, float(self.width)
+        return float(self.zones[zone][0]), float(self.zones[zone][1])
+
+    def zone_nodes(self, zone: int) -> tuple[int, ...]:
+        if not self.zones:
+            return tuple(range(self.sensor_count))
+        return tuple(self.zones[zone][2])
+
+    def zone_of(self, node: int) -> int:
+        """The zone a box tracks for."""
+        return next((z for z in range(self.zone_count) if node in self.zone_nodes(z)), 0)
+
+    def zone_at(self, x: float):
+        """The zone whose x range holds `x` (a shared edge goes to the lower zone), else None."""
+        for z in range(self.zone_count):
+            lo, hi = self.zone_bounds(z)
+            if lo <= x <= hi:
+                return z
+        return None
 
     def sensor_x(self, node: int) -> float:
         """x position of sensor `node`; nodes are numbered left to right."""
@@ -311,7 +365,20 @@ def load_geometry(path: str | None) -> Geometry:
     for key in ("extra_sensor_x", "sweep_bounds_deg", "servo_travel_deg"):
         if key in data:
             data[key] = tuple(tuple(v) if isinstance(v, list) else v for v in data[key])
+    if "zones" in data:
+        data["zones"] = tuple(_zone_from_json(zone) for zone in data["zones"])
     return Geometry(**data)
+
+
+def _zone_from_json(zone):
+    """{"x": [lo, hi], "nodes": [..]} or [lo, hi, [..]] -> (lo, hi, (..))."""
+    if isinstance(zone, dict):
+        if set(zone) != {"x", "nodes"} or not isinstance(zone["x"], list) or len(zone["x"]) != 2:
+            raise ValueError('A zone is {"x": [low, high], "nodes": [...]}')
+        return (zone["x"][0], zone["x"][1], tuple(zone["nodes"]))
+    if not isinstance(zone, list) or len(zone) != 3:
+        raise ValueError('A zone is {"x": [low, high], "nodes": [...]}')
+    return (zone[0], zone[1], tuple(zone[2]))
 
 
 def locate(geometry: Geometry, left_m: float, right_m: float) -> tuple[float, float]:
