@@ -1,5 +1,5 @@
 /*
- * ONE BOARD'S PART IN FOLLOWING A PLAYER
+ * ONE BOARD'S PART IN FOLLOWING A PLAYER  (+ battery voltage monitor)
  *
  * This file controls one servo and one ultrasonic sensor. NODE_ID selects the
  * board by position, left to right: 0, 1, 2 with three boxes (0, 1 with two);
@@ -25,6 +25,12 @@
  * Background rejection, combining the two observations, and the on-screen dot
  * belong to the laptop. Every board is an ordinary Wi-Fi station on the phone
  * hotspot, and so is the laptop, which is the tracking coordinator.
+ *
+ * BATTERY MONITOR (added): the board ALSO runs its own soft access point
+ * ("ESP32-Battery") with a TCP server on port 8080 that streams the battery
+ * voltage and percentage once a second. The radio therefore runs in
+ * WIFI_AP_STA mode. The battery code is non-blocking so it never stalls the
+ * servo ramp, UDP handling or the settling deadlines.
  */
 
 #include <Arduino.h>
@@ -38,6 +44,10 @@
 #if ESP_ARDUINO_VERSION_MAJOR != 2 && ESP_ARDUINO_VERSION_MAJOR != 3
 #error "This firmware supports Arduino-ESP32 core 2.x and 3.x"
 #endif
+
+// Battery sense input (GPIO39, ADC1). Make sure SERVO_PIN, ULTRASONIC_*_PIN
+// and BUZZER_PIN in settings.h do not use this pin.
+#define BATTERY_PIN 39
 
 namespace {
 
@@ -65,6 +75,28 @@ constexpr size_t kCacheSize = 16;
 // empty name means no credentials were entered, so nothing is ever joined.
 constexpr char kWifiSsid[] = WIFI_SSID;
 constexpr bool kHaveWifiCredentials = sizeof(kWifiSsid) > 1;
+
+// ---- Battery monitor configuration (unchanged values) ----
+const float R5 = 50000.0;
+const float R6 = 10000.0;
+const float CALIBRATION_FACTOR = 1.0;
+
+const char *AP_SSID = "ESP32-Battery";
+const char *AP_PASS = "battery123";
+
+WiFiServer battery_server(8080);
+WiFiClient battery_client;
+
+// The original averaged 30 ADC readings, 2 ms apart, then waited 1000 ms.
+// Those waits are now timer-driven so the main loop keeps running.
+constexpr int kBatterySamples = 30;
+constexpr uint32_t kBatterySampleGapMs = 2;
+constexpr uint32_t kBatteryReportIntervalMs = 1000;
+bool battery_sampling = false;
+int battery_total = 0;
+int battery_count = 0;
+uint32_t battery_next_sample_at = 0;
+uint32_t battery_next_cycle_at = 0;
 
 WiFiUDP udp;
 // UDP readiness, PWM setup success and a servo's settling deadline are separate:
@@ -273,6 +305,72 @@ void buzzer_tick() {
 #if BUZZER_PIN >= 0
   if (buzzer.expired(millis())) write_buzzer(false);
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// Battery monitor
+// ---------------------------------------------------------------------------
+
+float batteryVoltageFromTotal(int total) {
+  // Same maths as the original readBatteryVoltage(): average the readings
+  // (mV -> V), then undo the R5/R6 divider and apply the calibration factor.
+  float adcVoltage = (total / static_cast<float>(kBatterySamples)) / 1000.0f;
+
+  float batteryVoltage =
+      adcVoltage * ((R5 + R6) / R6) * CALIBRATION_FACTOR;
+
+  return batteryVoltage;
+}
+
+void battery_tick() {
+  // Original loop(): accept a client, average 30 ADC reads (2 ms apart), compute
+  // percent, send if connected, then wait 1000 ms. Here each wait is a deadline
+  // instead of delay(), so one call does at most one ADC read and returns.
+  const uint32_t now = millis();
+
+  if (!battery_sampling) {
+    if (!reached(now, battery_next_cycle_at)) return;
+
+    if (!battery_client || !battery_client.connected())
+    {
+        battery_client = battery_server.available();
+    }
+
+    battery_sampling = true;
+    battery_total = 0;
+    battery_count = 0;
+    battery_next_sample_at = now;
+  }
+
+  if (!reached(now, battery_next_sample_at)) return;
+
+  // Read ADC multiple times for stability
+  battery_total += analogReadMilliVolts(BATTERY_PIN);
+  battery_count++;
+  battery_next_sample_at = now + kBatterySampleGapMs;
+  if (battery_count < kBatterySamples) return;
+
+  // All samples collected: finish this report cycle.
+  battery_sampling = false;
+  battery_next_cycle_at = now + kBatteryReportIntervalMs;
+
+  float voltage = batteryVoltageFromTotal(battery_total);
+
+  // Worked ex:
+  // (487 - 440) * 100 / 110
+  // = 47 * 100 / 110
+  // = 4700 / 110
+  // = 42.7 → 42
+  int percent = map(voltage * 100, 440, 550, 0, 100);
+  percent = constrain(percent, 0, 100);
+
+  // Serial.printf("Battery voltage: %.2f V\n", voltage);
+  // Serial.printf("Battery Percentage: %d%%\n", percent);
+
+  if (battery_client && battery_client.connected())
+  {
+      battery_client.printf("Battery: %.2f V  (%d%%)\n", voltage, percent);
+  }
 }
 
 void acquire(Transaction& transaction) {
@@ -569,6 +667,11 @@ void setup() {
   // immediately centres the PWM command, so the servo can move before networking
   // is ready. Both sensor mounts should face forward at this world bearing.
   Serial.begin(115200);
+
+  // Battery ADC setup (from the battery program).
+  analogReadResolution(12);
+  analogSetPinAttenuation(BATTERY_PIN, ADC_2_5db);
+
   pinMode(ULTRASONIC_TRIG_PIN, OUTPUT);
   digitalWrite(ULTRASONIC_TRIG_PIN, LOW);
   pinMode(ULTRASONIC_ECHO_PIN, INPUT);
@@ -612,9 +715,15 @@ void setup() {
   if (!buzzer_ready) Serial.println("Buzzer configuration failed; BUZZ commands are ignored");
 #endif
   WiFi.persistent(false);
-  WiFi.mode(WIFI_STA);
+  // Station (hotspot, tracking UDP) AND access point (battery TCP server).
+  WiFi.mode(WIFI_AP_STA);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
+
+  // Battery access point + server (from the battery program).
+  WiFi.softAP(AP_SSID, AP_PASS);
+  battery_server.begin();
+
   Serial.printf("Tracker node %u, Arduino %u.%u.%u\n", NODE_ID,
                 ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH);
   Serial.printf("Pins: servo=%u, TRIG=%u, ECHO=%u (sensor on 3V3, ECHO wired directly)\n",
@@ -634,6 +743,9 @@ void setup() {
     Serial.printf("Wi-Fi: will join \"%s\" (phone hotspot, 2.4 GHz)\n", kWifiSsid);
   else
     Serial.println("No Wi-Fi credentials: edit tracker_config.h (Arduino IDE) or include/config.local.h (PlatformIO)");
+
+  Serial.print("AP IP: ");
+  Serial.println(WiFi.softAPIP());
 }
 
 void loop() {
@@ -645,6 +757,7 @@ void loop() {
   // happens only for a permitted FIRE (or the retained WM1 measurement command).
   slew_servo();
   buzzer_tick();
+  battery_tick();  // Non-blocking: one ADC read at most per pass.
   network_tick();
   if (udp_ready) {
     settle_if_ready();
