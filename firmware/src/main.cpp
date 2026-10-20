@@ -26,11 +26,12 @@
  * belong to the laptop. Every board is an ordinary Wi-Fi station on the phone
  * hotspot, and so is the laptop, which is the tracking coordinator.
  *
- * BATTERY MONITOR (added): the board ALSO runs its own soft access point
- * ("ESP32-Battery") with a TCP server on port 8080 that streams the battery
- * voltage and percentage once a second. The radio therefore runs in
- * WIFI_AP_STA mode. The battery code is non-blocking so it never stalls the
- * servo ramp, UDP handling or the settling deadlines.
+ * BATTERY MONITOR (added): once a second the board reports its battery voltage
+ * and percentage to the laptop over the SAME hotspot/UDP model as everything
+ * else: a "WM2 BATT <node> <volts> <percent>" datagram broadcast to port 4210,
+ * exactly like HELLO. There is no access point and no TCP server. The battery
+ * code is non-blocking so it never stalls the servo ramp, UDP handling or the
+ * settling deadlines.
  */
 
 #include <Arduino.h>
@@ -80,12 +81,6 @@ constexpr bool kHaveWifiCredentials = sizeof(kWifiSsid) > 1;
 const float R5 = 50000.0;
 const float R6 = 10000.0;
 const float CALIBRATION_FACTOR = 1.0;
-
-const char *AP_SSID = "ESP32-Battery";
-const char *AP_PASS = "battery123";
-
-WiFiServer battery_server(8080);
-WiFiClient battery_client;
 
 // The original averaged 30 ADC readings, 2 ms apart, then waited 1000 ms.
 // Those waits are now timer-driven so the main loop keeps running.
@@ -163,6 +158,17 @@ bool reached(uint32_t now, uint32_t deadline) {
 bool network_available() {
   // Every board is a station: usable only while associated with the hotspot.
   return WiFi.status() == WL_CONNECTED;
+}
+
+IPAddress broadcast_address() {
+  // Set all host bits (the bits outside the subnet mask) to 1 to form this
+  // network's broadcast address.
+  const IPAddress local = WiFi.localIP();
+  const IPAddress mask = WiFi.subnetMask();
+  IPAddress broadcast;
+  for (unsigned i = 0; i < 4; ++i)
+    broadcast[i] = static_cast<uint8_t>(local[i] | static_cast<uint8_t>(~mask[i]));
+  return broadcast;
 }
 
 void reset_session() {
@@ -323,18 +329,13 @@ float batteryVoltageFromTotal(int total) {
 }
 
 void battery_tick() {
-  // Original loop(): accept a client, average 30 ADC reads (2 ms apart), compute
-  // percent, send if connected, then wait 1000 ms. Here each wait is a deadline
+  // Original loop(): average 30 ADC reads (2 ms apart), compute percent, send,
+  // then wait 1000 ms. Here each wait is a deadline
   // instead of delay(), so one call does at most one ADC read and returns.
   const uint32_t now = millis();
 
   if (!battery_sampling) {
     if (!reached(now, battery_next_cycle_at)) return;
-
-    if (!battery_client || !battery_client.connected())
-    {
-        battery_client = battery_server.available();
-    }
 
     battery_sampling = true;
     battery_total = 0;
@@ -367,9 +368,13 @@ void battery_tick() {
   // Serial.printf("Battery voltage: %.2f V\n", voltage);
   // Serial.printf("Battery Percentage: %d%%\n", percent);
 
-  if (battery_client && battery_client.connected())
-  {
-      battery_client.printf("Battery: %.2f V  (%d%%)\n", voltage, percent);
+  // Report over the hotspot like HELLO: broadcast to the laptop's port. Nothing
+  // is sent while the board is not associated (send_text checks), and the
+  // report touches no owner/sequence/lease state.
+  if (udp_ready && network_available()) {
+    char message[48];
+    snprintf(message, sizeof(message), "WM2 BATT %u %.2f %d", NODE_ID, voltage, percent);
+    send_text(broadcast_address(), message);
   }
 }
 
@@ -648,15 +653,9 @@ void network_tick() {
   }
   if (now - last_hello_at >= kHelloIntervalMs) {
     last_hello_at = now;
-    const IPAddress local = WiFi.localIP();
-    const IPAddress mask = WiFi.subnetMask();
-    // Set all host bits (the bits outside the subnet mask) to 1 to form this
-    // network's broadcast address. Every node periodically announces itself
-    // so the laptop can discover DHCP addresses without hard-coding them.
-    IPAddress broadcast;
-    for (unsigned i = 0; i < 4; ++i)
-      broadcast[i] = static_cast<uint8_t>(local[i] | static_cast<uint8_t>(~mask[i]));
-    send_hello(broadcast);
+    // Every node periodically announces itself on the broadcast address so the
+    // laptop can discover DHCP addresses without hard-coding them.
+    send_hello(broadcast_address());
   }
 }
 
@@ -715,14 +714,9 @@ void setup() {
   if (!buzzer_ready) Serial.println("Buzzer configuration failed; BUZZ commands are ignored");
 #endif
   WiFi.persistent(false);
-  // Station (hotspot, tracking UDP) AND access point (battery TCP server).
-  WiFi.mode(WIFI_AP_STA);
+  WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
-
-  // Battery access point + server (from the battery program).
-  WiFi.softAP(AP_SSID, AP_PASS);
-  battery_server.begin();
 
   Serial.printf("Tracker node %u, Arduino %u.%u.%u\n", NODE_ID,
                 ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH);
@@ -743,9 +737,6 @@ void setup() {
     Serial.printf("Wi-Fi: will join \"%s\" (phone hotspot, 2.4 GHz)\n", kWifiSsid);
   else
     Serial.println("No Wi-Fi credentials: edit tracker_config.h (Arduino IDE) or include/config.local.h (PlatformIO)");
-
-  Serial.print("AP IP: ");
-  Serial.println(WiFi.softAPIP());
 }
 
 void loop() {
