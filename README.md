@@ -236,6 +236,8 @@ stands, so nothing is reflashed to switch modes. Build the fourth box like the
 others with the `node_fourth` environment (`tracker_fourth` sketch). Players
 keep to their own half; holes should stay at least 0.25 m from the dividing
 line, so that a body never straddles it.
+Wiring, flashing, bench checks and the acceptance tests of the fourth box are
+in [docs/box4-setup.md](docs/box4-setup.md); `make fourth` flashes it.
 
 ```bash
 python3 -m whack --tracker swarm --config config.pvp.json --calibration calibration.pvp.json
