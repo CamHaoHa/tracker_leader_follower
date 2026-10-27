@@ -21,13 +21,16 @@ Board: ESP32 DevKit V1 style (Freenove ESP32-WROOM-32E or ELEGOO CP2102
 | Servo signal (orange or yellow) | **GPIO33** | PWM output |
 | Servo V+ (red) | **VIN / 5V pin** (the USB 5 V rail) | Never the 3V3 pin or a GPIO: brown-outs and Wi-Fi drops |
 | Servo GND (brown or black) | **GND** | Must share ground with the ESP32 |
-| Power | **USB** (power bank or laptop) | Box 4 has no battery pack: it is the add-on that shows the two-player mode, powered over its USB cable |
+| Power | **USB** from a supply that holds 5 V at 1 A (laptop, or a battery pack with a USB lead) | Box 4 has no battery pack of its own. A phone power bank sags under the servo and makes it hunt and buzz |
 | Buzzer | none | Only the middle box (node 1) has one, on GPIO25 |
 
 Rules that keep the box alive:
 
-- Box 4 runs from USB only. A power bank that switches off at low current
-  may drop the box between pings; one that stays on with a 100 mA load is fine.
+- Box 4 runs from USB. **Not a phone power bank**: on 26 October 2026 a
+  90 → 10° move on a power bank sagged the 5 V rail, the servo overshot and
+  hunted at 10° with a loud buzz, while the same move on laptop USB was
+  silent. Use a battery pack like the other boxes, or a USB supply that
+  holds 5 V at 1 A.
 - Do not move the sensor to 5 V. With a 5 V supply ECHO is 5 V and GPIO34
   then needs a 2.2 kΩ / 3.3 kΩ divider. Only HC-SR04 revisions rated 3–5.5 V
   range reliably on 3V3; a classic 5 V-only one shows `TIMEOUT` on every ping.
@@ -67,6 +70,12 @@ banner). These are the first three rows of the test table below.
 | B1 | Servo moves and centres | `python3 -m tools.probe_node --ip <ip> --node 3 --angle 90 --count 3` then `--angle 10` and `--angle 90` again | Horn swings about 80° one way for 10° and comes back to the same centre; no buzzing or stall. Which way is the right half is confirmed in A1/A2: node 3 must range a target standing at x > 0.85 m |
 | B2 | Sensor ranges a flat target | board or box lid at 0.50 m, then 1.00 m, facing the sensor: `python3 -m tools.probe_node --ip <ip> --node 3 --angle 90 --count 10` | At least 9 of 10 `OK` with distance within ±3 cm of the tape measure |
 | B3 | No echo = TIMEOUT, not a crash | point the sensor at open space > 4 m | `TIMEOUT` rows, the box keeps answering |
+
+Seen on 25 October 2026 with box 4: every command answered and ranges
+came back, but the horn never moved; the firmware banner had no servo
+error. The servo itself was dead; a swap fixed it. A box that answers but
+does not turn is a servo, power (red lead on VIN, not 3V3) or signal-pin
+(GPIO33, not 32) problem, never the radio.
 
 A box that returns `TIMEOUT` with a target at 0.5 m has a sensor or wiring
 fault (box 0 behaved like this on 20 October): check VCC on 3V3, ECHO on
