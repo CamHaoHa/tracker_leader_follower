@@ -8,6 +8,13 @@ import time
 import tkinter as tk
 
 
+def _battery_text(snapshot, node):
+    """'  battery 42% 4.86 V' for a box that has reported, else nothing."""
+    levels = getattr(snapshot, "battery", ())
+    level = levels[node] if node < len(levels) else None
+    return "" if level is None else f"  battery {level[0]}% {level[1]:.2f} V"
+
+
 class TrackerWindow:
     """Display one current position; acquisition is owned by the controller.
 
@@ -266,8 +273,8 @@ class TrackerWindow:
             lines += [
                 ("State: " + ", ".join(f"P{i + 1} {z.state.replace('_', ' ')}" for i, z in enumerate(zones))
                  if len(zones) > 1 else f"State: {snapshot.state.replace('_', ' ')}") if snapshot else "State: waiting",
-                *([f"Box {i}: {status}" for i, status in enumerate(snapshot.node_status)] if snapshot
-                  else ["Boxes: waiting"]),
+                *([f"Box {i}: {status}{_battery_text(snapshot, i)}" for i, status in enumerate(snapshot.node_status)]
+                  if snapshot else ["Boxes: waiting"]),
                 f"Width: {self.geometry.width:g} m",
                 f"Top: {self.geometry.near_y:g} m    Bottom: {self.geometry.far_y:g} m",
             ]

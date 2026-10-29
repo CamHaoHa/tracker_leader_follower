@@ -41,6 +41,19 @@ class Ready:
     status: str
 
 
+@dataclass(frozen=True)
+class Battery:
+    """One box's battery, as the firmware broadcasts it about once a second.
+
+    ``WM2 BATT <node> <volts> <percent>`` goes to the laptop's port like HELLO.
+    It is never requested and never answered: a box built without the voltage
+    divider simply sends none.
+    """
+    node: int
+    volts: float
+    percent: int
+
+
 def _command_bounds(seq, angle_mdeg=None):
     if type(seq) is not int or not 1 <= seq <= MAX_SEQUENCE:
         raise ValueError("Sequence out of bounds")
@@ -48,7 +61,7 @@ def _command_bounds(seq, angle_mdeg=None):
         raise ValueError("Angle out of bounds")
 
 
-def parse(data: bytes) -> Hello | Range | Ready:
+def parse(data: bytes) -> Hello | Range | Ready | Battery:
     if len(data) > MAX_PACKET:
         raise ValueError("Oversized datagram")
     try:
@@ -58,6 +71,12 @@ def parse(data: bytes) -> Hello | Range | Ready:
     hello = re.fullmatch(r"WM([12]) HELLO ([0-9])\n?", text)
     if hello:
         return Hello(int(hello[2]), int(hello[1]))
+    battery = re.fullmatch(r"WM2 BATT ([0-9]) ([0-9]{1,2}(?:\.[0-9]{1,3})?) ([0-9]{1,3})\n?", text)
+    if battery:
+        node, volts, percent = int(battery[1]), float(battery[2]), int(battery[3])
+        if percent > 100:
+            raise ValueError("Battery percentage out of bounds")
+        return Battery(node, volts, percent)
     ready = re.fullmatch(
         r"WM2 READY ([0-9]) ([0-9]{1,10}) ([0-9]{1,6}) ([0-9]{1,4}) (OK|INVALID)\n?", text
     )

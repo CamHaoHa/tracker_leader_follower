@@ -1,5 +1,5 @@
 import unittest
-from whack.protocol import Hello, Range, Ready, aim, buzz, fire, measure, parse
+from whack.protocol import Battery, Hello, Range, Ready, aim, buzz, fire, measure, parse
 
 
 class ProtocolTests(unittest.TestCase):
@@ -54,6 +54,9 @@ class ProtocolTests(unittest.TestCase):
     def test_buzz_is_a_command_not_a_message_from_a_box(self):
         with self.assertRaises(ValueError):
             parse(buzz(400))
+
+    def test_battery_is_a_broadcast_from_a_box(self):
+        self.assertEqual(parse(b"WM2 BATT 2 4.86 42"), Battery(2, 4.86, 42))
 
 
 if __name__ == "__main__":

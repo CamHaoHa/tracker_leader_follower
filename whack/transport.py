@@ -6,7 +6,7 @@ import math
 import re
 import socket
 
-from .protocol import MAX_BUZZ_MS, MAX_PACKET, MAX_SEQUENCE, Hello, Range, Ready, parse
+from .protocol import MAX_BUZZ_MS, MAX_PACKET, MAX_SEQUENCE, Battery, Hello, Range, Ready, parse
 
 
 class UdpTransport:
@@ -150,6 +150,16 @@ class SimulatedTransport:
         # BUZZ is kept apart from the AIM/FIRE records: (time, node, duration_ms).
         self.buzzes = []
         self.buzz_until = [float("-inf")] * n
+        # Battery reports, as the firmware broadcasts them once a second from
+        # about a second after boot. Set a node's percent to None for a box
+        # built without the gauge: it then sends none, as on the hardware.
+        self.battery_percent = [100] * n
+        self.battery_next_at = [1.0] * n
+
+    @staticmethod
+    def battery_volts(percent):
+        """The pack voltage the firmware would have mapped to this percentage (4.40 V = 0, 5.50 V = 100)."""
+        return round(4.40 + 1.10 * percent / 100, 2)
 
     def address(self, node):
         return (f"sim-{node}", 4211)
@@ -200,6 +210,10 @@ class SimulatedTransport:
                 # The lease starts when READY is created, as on the ESP32.
                 request.lease_until = now + 1.0
                 self._ready(node, request, now)
+        for node, percent in enumerate(self.battery_percent):
+            if percent is not None and now >= self.battery_next_at[node]:
+                self.battery_next_at[node] = now + 1.0
+                self._reply(node, Battery(node, self.battery_volts(percent), int(percent)))
         due = [echo for echo in self.pending if now >= echo.done_at]
         self.pending = [echo for echo in self.pending if now < echo.done_at]
         for echo in due:

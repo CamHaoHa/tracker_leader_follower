@@ -108,6 +108,11 @@ on 2026-10-01, and the firmware has no network profiles any more.
 - No IP address is entered anywhere. Every box broadcasts `WM2 HELLO <node>` to
   UDP 4210 every two seconds; the laptop listens there and finds the boxes. The
   boxes receive their commands on UDP 4211.
+- A box with the battery divider (GPIO39) also broadcasts
+  `WM2 BATT <node> <volts> <percent>` once a second. The laptop keeps the last
+  report per box (`Snapshot.battery`, the window's box lines, the headless
+  JSON); a box that has said nothing for 10 s has no known level. Nothing is
+  requested and a box without the divider sends none.
 
 Start the three-box prototype once the laptop is on the hotspot:
 

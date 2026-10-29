@@ -157,6 +157,18 @@ With explicit node IPs, the laptop also requests a unicast capability reply:
 WM2 DISCOVER
 ```
 
+A box with the battery divider on GPIO39 (50 kΩ / 10 kΩ, see `BATTERY_PIN`
+in `main.cpp`) also broadcasts its pack voltage and the percentage the
+firmware maps from it (4.40 V = 0 %, 5.50 V = 100 %) once a second:
+
+```text
+WM2 BATT 1 4.87 42
+```
+
+It is never requested and has no reply. A box without the divider reads a
+floating pin and still sends a report; wire GPIO39 to ground on such a box or
+ignore its row. The laptop keeps the last report per box for 10 s.
+
 DISCOVER returns HELLO to the request's source port. It does not move the servo,
 claim control ownership, change sequence ordering or alter firing permissions.
 The laptop requires a fresh compatible node identity; protocol freshness expires

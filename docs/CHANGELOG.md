@@ -1,3 +1,17 @@
+## 2026-10-29 — battery level of each box
+
+- The firmware on `main` (0def350) broadcasts `WM2 BATT <node> <volts> <percent>`
+  once a second from a box with the GPIO39 divider. The laptop now reads it:
+  `protocol.Battery`, kept per box in `SwarmController.battery`, exposed as
+  `Snapshot.battery` (one `(percent, volts, age_s)` or None per box),
+  `battery_levels()` and `battery_lowest()`. A box silent for 10 s has no
+  level. Only the address that owns the node number is believed.
+- The window's box lines and the headless JSON show the levels. The simulator
+  reports 100 % per box (`battery_percent`, None for a box without a gauge).
+- Nothing is requested from the boxes and the firmware is unchanged. The
+  game's own copy had asked `WM2 BATT` and waited for `WM2 BATTERY`, which no
+  firmware sends; that copy is replaced by this.
+
 ## 2026-10-14 — player versus player: zones, four boxes
 
 - `geometry.zones` splits the field side by side, one player per zone, each

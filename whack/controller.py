@@ -55,6 +55,9 @@ class Snapshot:
     # Player versus player: one Snapshot per zone (same fields, no zones of its
     # own). The fields above then describe zone 0; empty for the paired tracker.
     zones: tuple = ()
+    # One entry per box: (percent, volts, seconds since its last report), or
+    # None for a box that has not reported recently (no gauge, or offline).
+    battery: tuple = ()
 
 
 @dataclass

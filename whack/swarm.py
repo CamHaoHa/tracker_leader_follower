@@ -75,7 +75,7 @@ import statistics
 import time
 
 from .controller import Snapshot
-from .protocol import MAX_SEQUENCE, Range, Ready, aim, buzz, fire
+from .protocol import MAX_SEQUENCE, Battery, Range, Ready, aim, buzz, fire
 from .tracking import Geometry
 from .transport import SimulatedTransport, UdpTransport
 
@@ -239,6 +239,7 @@ class SwarmController:
     ALERT_LATCH_S = 2.0         # an alert stays up at least this long
     BUZZ_MS = 400               # each BUZZ asks for this much sound...
     BUZZ_INTERVAL_S = .2        # ...and is repeated this often, so one lost packet is not heard
+    BATTERY_STALE_S = 10.0      # a box reports every second; silent this long = no level known
     DEAD_ZONE_ALERT = "Player in the dead zone"
     TOO_CLOSE_ALERT = "Player too close to box "     # followed by the node number
     PINGS_PER_CALIBRATION_BEARING = 3
@@ -272,6 +273,7 @@ class SwarmController:
         self.buzz_address = None               # where the sound was last requested
         self.too_close_since = {}              # node -> when it began reporting a player too close
         self.too_close_seen = {}               # node -> its latest such report
+        self.battery = {}                      # node -> (percent, volts, time received)
         self.paused = self.idle_after_calibration = bool(start_paused)
         self.calibration_path = Path(calibration_path)
         self.background = {}
@@ -818,6 +820,9 @@ class SwarmController:
                 zone.reason = f"Network receive failed: {exc}"
             return
         for message, address in messages:
+            if isinstance(message, Battery):
+                self._on_battery(message, address, now)
+                continue
             if not isinstance(message, (Range, Ready)) or not 0 <= message.node < self.count:
                 continue
             box = self.boxes[message.node]
@@ -858,6 +863,38 @@ class SwarmController:
                 continue
             stamp = (txn.fire_time + max(txn.fire_time, upper))/2
             self._on_range(box, message, stamp, now, txn.mode)
+
+    # ----- battery --------------------------------------------------------
+    def _on_battery(self, message, address, now):
+        # Only the box that owns this node number's address may report for it;
+        # the report changes nothing about aims, leases or the session.
+        if 0 <= message.node < self.count and address == self.transport.address(message.node):
+            self.battery[message.node] = (message.percent, message.volts, now)
+
+    def battery_levels(self, now=None):
+        """One entry per box: (percent, volts, seconds since its report), or None.
+
+        None means no level is known: the box never reported (no gauge wired,
+        or it is offline) or its last report is older than BATTERY_STALE_S.
+        """
+        now = self.clock() if now is None else now
+        levels = []
+        for n in range(self.count):
+            report = self.battery.get(n)
+            if report is None or now - report[2] > self.BATTERY_STALE_S:
+                levels.append(None)
+            else:
+                percent, volts, received = report
+                levels.append((percent, volts, max(0.0, now - received)))
+        return tuple(levels)
+
+    def battery_lowest(self, now=None):
+        """(node, percent) of the weakest box with a known level, or None."""
+        known = [(level[0], n) for n, level in enumerate(self.battery_levels(now)) if level is not None]
+        if not known:
+            return None
+        percent, node = min(known)
+        return node, percent
 
     def _connected(self):
         addresses = [self.transport.address(n) for n in range(self.count)]
@@ -1063,7 +1100,8 @@ class SwarmController:
         status = zones[0].status if len(zones) == 1 or common is not None else \
             " | ".join(f"P{zone.index + 1}: {snap.status}" for zone, snap in zip(self.zones, zones))
         alert = next((snap.alert for snap in zones if snap.alert), "")
-        return replace(zones[0], status=status, node_status=tuple(self.node_status), alert=alert, zones=zones)
+        return replace(zones[0], status=status, node_status=tuple(self.node_status), alert=alert, zones=zones,
+                       battery=self.battery_levels(now))
 
     def _zone_snapshot(self, zone, now, common):
         g = self.geometry

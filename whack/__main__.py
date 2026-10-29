@@ -116,6 +116,8 @@ def main(argv=None):
                 "nodes": snap.node_status, "state": snap.state, "predicted": snap.predicted,
                 "confidence": snap.confidence, "fix_age_s": _finite_age(snap),
                 "update_hz": snap.update_hz, "zones": _zones(snap),
+                "battery": [None if level is None else {"percent": level[0], "volts": level[1]}
+                            for level in getattr(snap, "battery", ())],
             }, allow_nan=False))
             calibration_done = args.calibrate and bool(controller.background) and not controller.calibrating
             return 0 if tracked or calibration_done else 1
