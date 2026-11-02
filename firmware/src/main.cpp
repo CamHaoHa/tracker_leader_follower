@@ -50,6 +50,12 @@
 // and BUZZER_PIN in settings.h do not use this pin.
 #define BATTERY_PIN 39
 
+// Box 4 (node_fourth builds with BATTERY_SENSE=0) has no battery: it runs from
+// USB 5 V with GPIO39 left empty, so it reports that supply as full.
+#ifndef BATTERY_SENSE
+#define BATTERY_SENSE 1
+#endif
+
 namespace {
 
 // UDP ports identify the receiving programs: 4210 is the laptop coordinator,
@@ -364,6 +370,10 @@ void battery_tick() {
   // = 42.7 → 42
   int percent = map(voltage * 100, 440, 550, 0, 100);
   percent = constrain(percent, 0, 100);
+#if !BATTERY_SENSE
+  voltage = 5.0f;  // the USB supply, not a reading of the empty pin
+  percent = 100;
+#endif
 
   // Serial.printf("Battery voltage: %.2f V\n", voltage);
   // Serial.printf("Battery Percentage: %d%%\n", percent);

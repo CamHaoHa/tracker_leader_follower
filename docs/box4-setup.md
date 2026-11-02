@@ -36,9 +36,9 @@ Rules that keep the box alive:
   range reliably on 3V3; a classic 5 V-only one shows `TIMEOUT` on every ping.
 - Never use GPIO1 / GPIO3 (USB serial), GPIO6–11 (flash), GPIO34–39 as
   outputs (input only), or GPIO0 / 2 / 12 / 15 (boot strapping pins).
-- Battery sense (GPIO39 through a 50 kΩ / 10 kΩ divider) exists only in the
-  teammate's firmware on `origin/main` (0def350). The build `make fourth`
-  flashes from this branch has no battery monitor, so leave GPIO39 empty.
+- Battery sense: the other boxes read their pack on GPIO39 through a
+  50 kΩ / 10 kΩ divider. Box 4 has no battery, so leave GPIO39 empty: the
+  `make fourth` build (`BATTERY_SENSE=0`) always reports `5.00 V, 100 %`.
 
 Checks with a multimeter before the first power-up: 3V3 pin to GND about
 3.3 V with USB in; VIN to GND about 5 V; no short between VIN and GND; servo

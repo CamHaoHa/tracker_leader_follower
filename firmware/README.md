@@ -167,7 +167,9 @@ WM2 BATT 1 4.87 42
 
 It is never requested and has no reply. A box without the divider reads a
 floating pin and still sends a report; wire GPIO39 to ground on such a box or
-ignore its row. The laptop keeps the last report per box for 10 s.
+ignore its row. Box 4 is built that way on purpose: `node_fourth` sets
+`BATTERY_SENSE=0`, so it runs from USB with GPIO39 empty and always reports
+`WM2 BATT 3 5.00 100`. The laptop keeps the last report per box for 10 s.
 
 DISCOVER returns HELLO to the request's source port. It does not move the servo,
 claim control ownership, change sequence ordering or alter firing permissions.
