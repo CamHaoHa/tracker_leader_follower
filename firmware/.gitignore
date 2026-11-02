@@ -1,3 +1,5 @@
 .pio/
 .pio-core/
 include/config.local.h
+.vscode/c_cpp_properties.json
+.vscode/launch.json
